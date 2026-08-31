@@ -189,7 +189,11 @@ st.caption("NetCDF模式预报 × 深圳开放数据API实况｜北京时间｜�
 
 with st.sidebar:
     st.header("检验设置")
-    secret_app_key = st.secrets.get("APP_KEY", "")
+    try:
+        secret_app_key = st.secrets.get("APP_KEY", "")
+    except Exception:
+        # 本机运行时可能尚未创建 .streamlit/secrets.toml。
+        secret_app_key = ""
     app_key = st.text_input("开放数据 appKey", value=secret_app_key, type="password",
                             help="部署时建议在 Streamlit Secrets 中配置 APP_KEY")
     run_date = st.date_input("模式起报日期（UTC）", value=datetime.now().date())
