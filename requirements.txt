@@ -1,0 +1,11 @@
+streamlit>=1.40
+pandas>=2.2
+numpy>=1.26
+matplotlib>=3.8
+requests>=2.31
+urllib3>=2.2
+netCDF4>=1.7
+openpyxl>=3.1
+geopandas>=1.0
+shapely>=2.0
+
