@@ -1,14 +1,19 @@
-# 深圳格点预报检验平台（MVP）
+# 深圳格点预报检验平台
 
 ## 启动
 
-```powershell
-cd C:\Users\chengyang\Documents\Codex\2026-08-31\sh\outputs\verification_platform
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
+```bash
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-页面中填写：模式目录、格点信息表、深圳街道边界和开放数据 appKey。平台不会把 appKey 写入文件。
+格点信息表和深圳街道边界位于项目的 `data` 目录。页面中填写模式起报时间并上传计算时段首尾两个 NetCDF 文件。平台不会把手动输入的 appKey 写入文件。
+
+部署到 Streamlit Community Cloud 时，在 Advanced settings → Secrets 中配置：
+
+```toml
+APP_KEY = "你的密钥"
+```
 
 当前支持：
 
@@ -19,4 +24,3 @@ python -m streamlit run app.py
 - TS、POD、FAR、BIAS；
 - 预报、实况、误差、命中/漏报/空报空间图；
 - CSV 结果下载。
-

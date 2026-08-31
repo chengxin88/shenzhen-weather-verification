@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import io
 import math
 from pathlib import Path
+import tempfile
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -103,20 +104,19 @@ def read_boundary(boundary_path):
 
 
 @st.cache_data(show_spinner=False)
-def read_forecast(data_dir, lead_hour, accumulation):
-    current_path = Path(data_dir) / f"postvar{lead_hour:03d}.nc"
-    previous_hour = lead_hour - accumulation
-    previous_path = Path(data_dir) / f"postvar{previous_hour:03d}.nc"
-    if previous_hour < 0:
-        raise ValueError("预报时效必须大于或等于累计时长")
-    for path in [current_path, previous_path]:
-        if not path.exists():
-            raise FileNotFoundError(f"找不到模式文件：{path}")
-    with Dataset(current_path) as current, Dataset(previous_path) as previous:
-        lon = np.asarray(current.variables["lon"][:], dtype=float)
-        lat = np.asarray(current.variables["lat"][:], dtype=float)
-        rain_now = np.ma.filled(current.variables["rain"][0, 0], np.nan).astype(float)
-        rain_before = np.ma.filled(previous.variables["rain"][0, 0], np.nan).astype(float)
+def read_forecast(current_bytes, previous_bytes):
+    """读取用户上传的两个累计降水 NetCDF，并计算时段增量。"""
+    with tempfile.NamedTemporaryFile(suffix=".nc") as current_file, \
+            tempfile.NamedTemporaryFile(suffix=".nc") as previous_file:
+        current_file.write(current_bytes)
+        previous_file.write(previous_bytes)
+        current_file.flush()
+        previous_file.flush()
+        with Dataset(current_file.name) as current, Dataset(previous_file.name) as previous:
+            lon = np.asarray(current.variables["lon"][:], dtype=float)
+            lat = np.asarray(current.variables["lat"][:], dtype=float)
+            rain_now = np.ma.filled(current.variables["rain"][0, 0], np.nan).astype(float)
+            rain_before = np.ma.filled(previous.variables["rain"][0, 0], np.nan).astype(float)
     rain = rain_now - rain_before
     rain[rain < -0.01] = np.nan
     rain[(rain >= -0.01) & (rain < 0)] = 0
@@ -180,17 +180,31 @@ def contingency_map(data, streets, threshold):
     return fig
 
 
-st.title("深圳格点预报检验平台 · MVP")
+BASE_DIR = Path(__file__).resolve().parent
+GRID_PATH = BASE_DIR / "data" / "grid.xlsx"
+BOUNDARY_PATH = BASE_DIR / "data" / "shenzhen_streets.geojson"
+
+st.title("深圳格点预报检验平台")
 st.caption("NetCDF模式预报 × 深圳开放数据API实况｜北京时间｜深圳街道边界")
 
 with st.sidebar:
     st.header("检验设置")
-    data_dir = st.text_input("模式目录", r"C:\Users\chengyang\Downloads\2026083023\2026083023")
-    grid_path = st.text_input("格点信息表", r"C:\Users\chengyang\Downloads\深圳范围自动站实况格点信息表_2920000903510.xlsx")
-    boundary_path = st.text_input("深圳街道边界", r"C:\Users\chengyang\Downloads\深圳街道\深圳街道\深圳街道.shp")
-    app_key = st.text_input("开放数据 appKey", type="password")
+    secret_app_key = st.secrets.get("APP_KEY", "")
+    app_key = st.text_input("开放数据 appKey", value=secret_app_key, type="password",
+                            help="部署时建议在 Streamlit Secrets 中配置 APP_KEY")
+    run_date = st.date_input("模式起报日期（UTC）", value=datetime.now().date())
+    run_hour = st.selectbox("模式起报时次（UTC）", list(range(24)), index=0,
+                            format_func=lambda value: f"{value:02d}时")
     lead_hour = st.number_input("结束预报时效（小时）", min_value=1, max_value=240, value=7)
     accumulation = st.selectbox("累计降水", [1, 3, 6, 24], index=0)
+    previous_hour = int(lead_hour) - accumulation
+    st.caption(f"需要 postvar{int(lead_hour):03d}.nc 与 postvar{previous_hour:03d}.nc")
+    current_file = st.file_uploader(
+        f"结束时效文件（postvar{int(lead_hour):03d}.nc）", type=["nc"]
+    )
+    previous_file = st.file_uploader(
+        f"起始时效文件（postvar{previous_hour:03d}.nc）", type=["nc"]
+    )
     default_thresholds = "0.1,1,2,5,10,20,30" if accumulation == 1 else "0.1,1,5,10,25,50,100"
     threshold_text = st.text_input("检验阈值（mm）", default_thresholds)
     run_button = st.button("开始检验", type="primary", use_container_width=True)
@@ -199,16 +213,24 @@ if run_button:
     try:
         if not app_key:
             raise ValueError("请输入 appKey")
-        run_time_utc = datetime.strptime(Path(data_dir).name, "%Y%m%d%H")
+        if previous_hour < 0:
+            raise ValueError("结束预报时效必须大于或等于累计时长")
+        if current_file is None or previous_file is None:
+            raise ValueError("请上传结束时效和起始时效两个 NetCDF 文件")
+        if not GRID_PATH.exists() or not BOUNDARY_PATH.exists():
+            raise FileNotFoundError("项目缺少 data/grid.xlsx 或 data/shenzhen_streets.geojson")
+        run_time_utc = datetime.combine(run_date, datetime.min.time()).replace(hour=run_hour)
         valid_time_bjt = run_time_utc + timedelta(hours=lead_hour + 8)
         rain_field = {1: "RAIN01H", 3: "RAIN03H", 6: "RAIN06H", 24: "RAIN24H"}[accumulation]
         thresholds = [float(value.strip()) for value in threshold_text.split(",") if value.strip()]
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         with st.spinner("读取模式、查询实况并匹配格点……"):
-            grid = read_grid(grid_path)
-            streets = read_boundary(boundary_path)
-            model_lon, model_lat, forecast = read_forecast(data_dir, int(lead_hour), accumulation)
+            grid = read_grid(GRID_PATH)
+            streets = read_boundary(BOUNDARY_PATH)
+            model_lon, model_lat, forecast = read_forecast(
+                current_file.getvalue(), previous_file.getvalue()
+            )
             observation = fetch_observation(app_key, valid_time_bjt.strftime("%Y-%m-%d %H:%M:%S"), rain_field)
             paired = prepare_pairs(grid, observation, streets, model_lon, model_lat, forecast)
             result = scores(paired, thresholds)
@@ -248,4 +270,4 @@ if run_button:
         st.error(str(error))
         st.exception(error)
 else:
-    st.info("请在左侧填写 appKey 和检验设置，然后点击“开始检验”。")
+    st.info("请在左侧设置起报时间、预报时效并上传两个 NetCDF 文件，然后点击“开始检验”。")
