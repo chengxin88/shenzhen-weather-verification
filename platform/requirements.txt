@@ -1,0 +1,12 @@
+# Versions installed in the source WSL environment on 2026-10-15.
+# Additional integrated forecast/globe modules have their own dependencies.
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+shapely==2.1.2
+requests==2.34.2
+eccodes==2.48.0
+omfiles==1.2.0
+openpyxl==3.1.5
+netCDF4==1.7.4
+streamlit==1.64.0

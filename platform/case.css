@@ -1,0 +1,14 @@
+.case-heading{margin:20px 0 15px}.case-heading h1{margin:3px 0 7px}.case-heading p{color:var(--muted);font-size:12px;margin:0}
+#case-workspace .filter-card{padding:16px 18px}#case-workspace .primary-filters{gap:16px 28px;margin-bottom:12px}
+#case-workspace .model-row{padding-top:12px;border-top:1px solid var(--line)}
+.case-actions{display:flex;align-items:center;gap:15px;margin-top:12px;flex-wrap:wrap}.case-primary{background:var(--teal);color:white;border:0;border-radius:4px;padding:9px 24px;font-weight:600}.case-actions span{color:var(--muted);font-size:12px}
+.case-advanced{border-top:1px solid var(--line);padding-top:10px;margin-top:13px}.case-advanced summary{cursor:pointer;color:var(--muted);font-size:12px}.case-advanced>div{padding-top:14px}
+.case-input{height:34px;border:1px solid #cddce5;border-radius:4px;padding:6px 10px;max-width:280px;width:100%;margin-top:5px}
+.case-progress{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.case-progress progress{accent-color:var(--teal);width:200px;height:8px}
+#case-workspace .case-plot{padding:18px;overflow:auto}#case-workspace .case-plot svg{width:100%;min-width:650px;display:block;max-height:650px}
+.case-empty{padding:55px 20px;text-align:center;color:var(--muted)}.case-summary{padding:12px 17px;color:var(--muted);font-size:12px}.case-detail{margin-top:13px;background:white;border:1px solid var(--line);border-radius:6px}.case-detail summary{padding:14px 17px;cursor:pointer}.case-detail .table-scroll{max-height:460px}
+.case-explain{font-size:12px;color:var(--muted);padding:0 18px 15px;line-height:1.8}.case-explain p{margin:7px 0}
+#case-workspace .model-chip[aria-pressed=true]{background:#e8f5f4;border-color:#79b5ba;color:#067982}
+#case-workspace .model-chip:disabled{background:#f4f5f6;color:#7b8289;border-style:dashed}
+#case-workspace .case-table td,#case-workspace .case-table th{white-space:nowrap}.case-view-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line)}
+@media(max-width:700px){#case-workspace .filter-card{padding:13px}#case-workspace .primary-filters{gap:12px}.case-actions{align-items:stretch}.case-actions span{width:100%}.case-heading h1{font-size:20px}.case-plot{padding:8px!important}.case-progress progress{width:100%}}

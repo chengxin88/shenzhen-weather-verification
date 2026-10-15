@@ -1,5 +1,18 @@
 # 深圳格点预报检验平台
 
+本仓库同时保留早期 Streamlit 应用，以及 2026-10-15 从现有 WSL 服务整理的多模块平台源码。
+
+| 版本 | 入口 | 说明 |
+| --- | --- | --- |
+| 当前多模块平台 | [`platform/server.py`](platform/server.py) | 降水、气温、地面、环流、个例、台风、月降水、模式接入及资料质控；包含 Open-Meteo EC 接入模块 |
+| 早期 Streamlit 版 | [`app.py`](app.py) | 上传 NetCDF、进行深圳格点降水检验，原入口保留 |
+
+当前平台的安装环境、外部项目依赖和部署步骤见 [平台运行说明](platform/README.md)。版本整理范围见 [迁移说明](docs/platform-migration.md)。
+
+当前平台使用 Python 后端和本地气象归档。GitHub 用于管理源码；运行服务需要 Linux/WSL、参考资料和现有公共代码，详见运行说明。
+
+以下内容为早期 Streamlit 版的使用说明。
+
 ## 启动
 
 ```bash

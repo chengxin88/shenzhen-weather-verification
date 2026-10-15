@@ -1,0 +1,17 @@
+# systemd --user template. Adapt paths before installing.
+# Install as ~/.config/systemd/user/weather-verification-test.service.
+[Unit]
+Description=Weather verification platform
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/chengyang/repos/shenzhen-weather-verification/platform
+ExecStart=/home/chengyang/.venvs/ec-gfs-server/bin/python server.py --port 8513
+# Optional file containing local paths, APP_KEY and proxy configuration.
+EnvironmentFile=-/home/chengyang/.config/weather-verification.env
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
