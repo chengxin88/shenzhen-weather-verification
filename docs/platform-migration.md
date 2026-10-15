@@ -9,7 +9,9 @@
 
 ## 整理范围
 
-根目录的 Streamlit `app.py`、`.streamlit/` 配置、`data/` 与原依赖清单保留。当前多模块平台放入 `platform/`，原 Python、JavaScript、CSS、HTML、测试与页面配置保留相对位置。
+当前多模块平台放入 `platform/`，原 Python、JavaScript、CSS、HTML、测试与页面配置保留相对位置。根据维护者要求，旧版 Streamlit 的根目录 `app.py`、`.streamlit/app.py` 和 `.streamlit/config.toml` 从当前文件树移除；根目录 `requirements.txt` 改为引用 `platform/requirements.txt`，README 以当前平台为入口。旧版仍可通过过往提交查看，提交历史保留。
+
+`data/grid.xlsx` 和 `data/shenzhen_streets.geojson` 与当前预报平台中使用的两个文件 SHA-256 一致，作为公共基础资料保留。
 
 Open-Meteo 的三个链接目标已复制成真实文件，避免仓库只包含指向本机目录的符号链接。原始文件名、校验值和是否来自符号链接记录在 `platform-source-manifest.json`。
 
@@ -31,4 +33,4 @@ Open-Meteo 的三个链接目标已复制成真实文件，避免仓库只包含
 - 模式接口、WN3 实样、资料质控与 HTTP 接口共 62 项 Python 测试通过。WN3 使用仓库外既有真实样本，测试请求绕过本地代理。
 - 前端 `test_demo_core.js` 通过。
 - Python 源码解析、暂存差异格式、缓存与本地配置排除规则通过检查。
-- 根目录旧版应用、配置、数据及依赖未发生变更。
+- 旧版 Streamlit 入口和专用配置已移除，根目录依赖清单指向当前平台；公共格网和边界资料保留。

@@ -93,4 +93,6 @@ NO_PROXY=127.0.0.1,localhost python -m unittest test_wn3_demo
 
 源码、页面配置、测试和说明文档纳入版本控制。缓存、评分目录、天气数据、密钥、日志和临时部署包由 `.gitignore` 排除。`model_ui_reference.json` 属于页面配置，保留在源码中。
 
+仓库根目录 `data/` 保留公共深圳格网及街道边界，与当前预报平台使用的文件一致。集成部署时，现有代码继续从 `VERIFICATION_APP_ROOT/data/` 等业务目录读取这些资料，具体路径见上面的依赖清单。旧版 Streamlit 应用入口和专用配置已移除，过往源码可通过提交历史查看。
+
 ERA5、GDAS、ECMWF/Open-Meteo 等资料的使用与再分发应遵循对应来源的许可和署名要求。气象数据的许可与本仓库源码的许可分别管理；本次整理没有新增源码许可声明。
