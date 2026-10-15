@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Verification platform runtime data and local configuration
+cache/
+.backups/
+.backfills/
+.previews/
+*.lock
+*.tmp
+*.download
+*.tar
+*.tgz
+*.grib
+*.grib2
+*.nc
+*.npz
+*.npy
+*.pkl
+*.pickle
+.env.*
+!.env.example
+**/secrets.toml
+platform/native-scores*.json
+platform/native-catalog*.json
+platform/original-hashes-*.json

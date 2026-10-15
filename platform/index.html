@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>气象模式检验 · 测试平台</title><link rel="stylesheet" href="./style.css?v=model-systems-20261015"><link rel="stylesheet" href="./case.css?v=opendata-case-v10"><link rel="stylesheet" href="./typhoon.css?v=native-typhoon-v1"><link rel="stylesheet" href="./monthly.css?v=monthly-precip-v1"><link rel="stylesheet" href="./model-interfaces.css?v=20261013"><link rel="stylesheet" href="./demo-models.css?v=20261013"><link rel="stylesheet" href="./quality.css?v=20261013"></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="./"><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M3 24h5l6-15 7 23 6-17 6 9"/></svg><span>气象检验平台<small>WEATHER VERIFICATION</small></span></a>
+  <p class="nav-label">检验工作台</p>
+  <nav aria-label="检验要素"><button data-kind="降水" class="nav-item active"><span>☂</span>降水检验</button><button data-kind="气温" class="nav-item"><span>°C</span>气温检验</button><button data-kind="地面" class="nav-item"><span>⇣</span>地面检验</button><button data-kind="环流" class="nav-item"><span>≋</span>环流检验</button></nav>
+  <p class="nav-label">专项检验</p>
+  <nav class="specialist-nav" aria-label="专项检验"><button type="button" data-module="case" class="nav-item" aria-pressed="false"><span aria-hidden="true">◎</span>个例检验</button><button type="button" data-module="typhoon" class="nav-item" aria-pressed="false"><span aria-hidden="true">◉</span>台风检验</button><button type="button" data-module="monthly" class="nav-item" aria-pressed="false"><span aria-hidden="true">▦</span>月降水检验</button></nav>
+  <p class="nav-label">模式管理</p><nav aria-label="模式管理"><button type="button" data-module="interfaces" class="nav-item" aria-pressed="false"><span aria-hidden="true">⊞</span>模式接入</button></nav>
+  <p class="nav-label">数据管理</p><nav aria-label="数据管理"><button type="button" data-module="quality" class="nav-item" aria-pressed="false"><span aria-hidden="true">✓</span>数据质控</button></nav>
+  <p class="nav-label">关联平台</p><a class="nav-link" href="/Verification/compare/" target="_blank" rel="noopener noreferrer">模式与 ERA5 对比 ↗</a><a class="nav-link" href="/Verification/compare/case/">历史个例 · 三屏对比 ↗</a><a class="nav-link" href="/Verification/" target="_self">原平台 →</a>
+  <div class="sidebar-bottom">SZVERIFY <span>试验版 02</span></div>
+</aside>
+<div class="workspace">
+  <header class="topbar"><div>模式评估 <span>/</span> 检验工作台 <b class="badge">TEST</b></div><nav class="topbar-actions" aria-label="平台操作"><a class="quiet" href="/Verification/" target="_self">原平台 →</a><button id="refresh" class="quiet">↻ 刷新资料</button></nav></header>
+  <main>
+    <section id="module-demo-mode" aria-label="WN3演示资料说明" hidden></section>
+    <section id="case-workspace" hidden aria-label="个例检验"></section>
+    <section id="monthly-workspace" hidden aria-label="月降水检验"></section>
+    <section id="typhoon-workspace" hidden aria-label="台风检验"></section>
+    <section id="interfaces-workspace" hidden aria-label="模式接入"></section>
+    <section id="quality-workspace" hidden aria-label="数据质控"></section>
+    <div id="grid-workspace">
+    <div class="page-heading"><div><h1 id="page-title">降水检验</h1></div><div id="catalog-status-wrap" class="coverage-label"><span id="catalog-status" role="status">读取资料…</span></div></div>
+    <div id="load-error" class="notice error" hidden></div>
+    <section class="filter-card" aria-label="检验条件">
+      <select id="dataset" aria-label="内部归档状态" hidden></select>
+      <div id="reference-filters" class="primary-filters reference-filters" hidden><div class="filter-field"><span>参考资料</span><div id="reference-switch" class="choice-buttons" role="group" aria-label="检验参考资料"></div></div></div>
+      <div id="circulation-filters" class="primary-filters circulation-filters" hidden>
+        <div class="filter-field"><span>检验要素</span><div id="circulation-field-switch" class="choice-buttons" role="group" aria-label="环流检验要素"><button type="button" data-circulation-field="height" aria-pressed="true">高度场</button><button type="button" data-circulation-field="wind" aria-pressed="false">风场</button></div></div>
+        <div class="filter-field circulation-level-field"><span>气压层</span><div id="circulation-level-switch" class="choice-buttons" role="group" aria-label="环流检验气压层"></div></div>
+        <p id="circulation-coverage" class="filter-note circulation-coverage"></p>
+      </div>
+      <div class="primary-filters">
+        <div id="accumulation-label" class="filter-field"><span>累计降水</span><div id="accumulation-switch" class="accumulation-switch" role="group" aria-label="降水累计时段"></div></div>
+        <div class="date-shortcuts filter-field"><span>日期范围</span><div><button data-days="1">今天</button><button data-days="3">近3天</button><button data-days="7" class="chosen">近7天</button><button data-days="30">近30天</button><button data-days="all">全部资料</button></div></div>
+        <div class="custom-date-range filter-field"><span>自定义日期 · BJT</span><div class="date-range-inputs" role="group" aria-label="自定义日期范围"><input id="start" type="date" aria-label="自定义开始日期" title="开始日期"><span aria-hidden="true">至</span><input id="end" type="date" aria-label="自定义结束日期" title="结束日期"></div></div>
+      </div>
+      <div id="score-scope-field" class="primary-filters" hidden><div class="filter-field"><span>查看方式</span><div class="choice-buttons" role="group" aria-label="评分时间范围"><button type="button" data-score-scope="period" aria-pressed="true">整段时间汇总</button><button type="button" data-score-scope="instant" aria-pressed="false">单个时刻</button></div></div></div>
+      <div class="primary-filters scoring-filters">
+        <div id="metric-label" class="filter-field metric-field"><span>评分指标</span><select id="metric" hidden aria-label="评分指标状态"></select><div id="metric-switch" class="choice-buttons" role="group" aria-label="评分指标"></div></div>
+        <div id="lead-label" class="filter-field lead-field"><span>预报时效</span><div id="lead-mode-switch" class="choice-buttons" role="group" aria-label="时效检验方式"><button type="button" data-lead-mode="single" aria-pressed="true">单个时效</button><button type="button" data-lead-mode="group" aria-pressed="false">分组检验</button></div><div id="lead-single-controls"><select id="lead" hidden aria-label="选择预报时效"></select><div id="lead-switch" class="choice-buttons" role="group" aria-label="预报时效"></div></div><div id="lead-group-switch" class="choice-buttons" role="group" aria-label="预报时效分组" hidden></div><p id="lead-group-help" class="time-selection-help" hidden>24小时计入临近预报，72小时计入短期预报；每个时效只归入一组。</p></div>
+        <div id="valid-label" class="filter-field valid-field" hidden><div class="filter-caption"><span>预报对应时间 · 北京时间</span><div id="valid-pager" class="option-pager" hidden><button id="valid-previous" type="button" class="quiet" aria-label="更早时刻" title="更早时刻">‹</button><span id="valid-page" role="status"></span><button id="valid-next" type="button" class="quiet" aria-label="更晚时刻" title="更晚时刻">›</button></div></div><select id="valid" hidden aria-label="预报对应时间状态"></select><div id="valid-switch" class="choice-buttons" role="group" aria-label="预报对应时间" aria-describedby="valid-help"></div><p id="valid-help" class="time-selection-help">选择要检验哪个时刻的天气；当前图表比较这个时刻的预报。</p></div>
+        <div id="threshold-label" class="filter-field"><span>降水阈值 · mm</span><select id="threshold" hidden aria-label="降水阈值状态"></select><div id="threshold-switch" class="choice-buttons" role="group" aria-label="降水阈值"></div></div>
+      </div>
+      <div class="model-row"><span>比较模式</span><div id="models" class="model-system-groups"></div><span id="scope-hint" class="scope-hint"></span></div>
+      <details id="advanced-filters" class="advanced-filters">
+        <summary><span>更多筛选</span><span id="active-filter-summary"></span></summary>
+        <div class="advanced-body">
+          <div class="advanced-grid"><div class="filter-field"><span>起报时次 · BJT</span><select id="hour" hidden aria-label="起报时次状态"><option value="all">全部时次</option><option value="02">02时</option><option value="08">08时</option><option value="14">14时</option><option value="20">20时</option></select><div id="hour-switch" class="choice-buttons" role="group" aria-label="起报时次"></div></div></div>
+          <div class="check-row"><label id="common-label" class="check"><input type="checkbox" id="common" checked>仅共同有效时次</label><label id="across-label" class="check" hidden><input id="across-leads" type="checkbox">各可用时效使用同一组有效时间</label><div class="model-tools"><button id="models-all" class="quiet">全选模式</button><button id="models-default" class="quiet">默认模式</button></div></div>
+        </div>
+      </details>
+      <p id="filter-note" class="filter-note current-source"></p>
+      <p id="analysis-source-note" class="filter-note current-source" hidden></p>
+      <div class="model-status-row" id="model-status-row" hidden><p id="model-status"></p></div>
+    </section>
+    <div id="lead-group-summary" class="period-summary" role="status" hidden></div>
+    <div id="period-summary" class="period-summary" role="status" hidden></div>
+    <div id="data-notice" class="notice" hidden></div>
+    <section class="stats" id="stats" aria-label="当前样本概况"></section>
+    <details class="sample-summary" id="sample-summary"><summary id="sample-title">样本明细</summary><div id="sample-details" class="sample-details"></div></details>
+    <section class="results">
+      <div class="tabs" role="tablist" aria-label="检验视图"><button role="tab" data-view="multi" aria-selected="true">多模式对比</button><button role="tab" data-view="single" aria-selected="false">单模式检验</button><button role="tab" data-view="lead" aria-selected="false">时效对比</button><button role="tab" data-view="matrix" aria-selected="false">时效 × 阈值</button><button role="tab" data-view="time" aria-selected="false">时间序列</button><button role="tab" data-view="performance" aria-selected="false">评分综合图</button><button role="tab" data-view="info" aria-selected="false">资料与口径</button></div>
+      <div class="result-heading"><div><h2 id="chart-title">读取评分…</h2><p id="chart-subtitle"></p></div><div class="chart-actions"><label id="time-mode-label" hidden>时序对比维度<select id="time-mode"><option value="models">多模式 · 固定时效</option><option value="leads">单模式 · 多时效</option></select></label><label id="single-label" hidden>模式<select id="single"></select></label><button id="export-svg" class="quiet">导出图表 ↓</button></div></div>
+      <div id="time-sample-controls" class="time-sample-controls" hidden><div class="choice-buttons" role="group" aria-label="时间序列时次范围"><button type="button" data-time-sample="all" aria-pressed="true">全部已有时次</button><button type="button" data-time-sample="common" aria-pressed="false">共同时次</button></div><span id="time-sample-note" class="time-sample-note"></span></div>
+      <div id="legend" class="legend"></div>
+      <div id="chart" class="chart" role="region" aria-label="检验图表"></div>
+      <div id="chart-explainer" class="chart-explainer"></div>
+    </section>
+    <section class="table-card"><div class="table-heading"><div><h2>评分明细</h2><p id="table-note"></p></div><button id="export-csv" class="quiet">导出 CSV ↓</button></div><div class="table-scroll"><table id="results-table"></table></div></section>
+    <footer><span id="updated"></span></footer>
+    </div>
+  </main>
+</div><script src="./core.js?v=lead-groups-20261012"></script><script src="./demo-models.js?v=model-systems-20261015"></script><script src="./app.js?v=openmeteo-20261015"></script><script src="./case_cache.js?v=auto-case-v11"></script><script src="./case.js?v=auto-case-v11-palette"></script><script src="./typhoon.js?v=names-20261009"></script><script src="./monthly.js?v=ensemble-average-20261011"></script><script src="./model-interfaces.js?v=20261013"></script><script src="./quality.js?v=20261013"></script><script src="./modules.js?v=model-interfaces-20261013"></script>
+</body></html>

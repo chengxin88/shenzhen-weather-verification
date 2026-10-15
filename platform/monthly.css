@@ -1,0 +1,15 @@
+.monthly-filters{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.monthly-filters select{min-width:120px;min-height:32px}
+.monthly-block{margin:10px 0;padding-bottom:12px}
+.monthly-maps{display:flex;flex-wrap:wrap;gap:10px;padding:12px 18px 4px}
+.monthly-maps figure{margin:0;flex:1 1 230px;max-width:330px;border:1px solid #e3eaef;border-radius:4px;padding:6px;background:#fbfdfe}
+.monthly-maps canvas{width:100%;height:auto;image-rendering:pixelated;display:block;background:#f2f5f8}
+.monthly-maps figcaption{font-size:11px;color:#526f80;text-align:center;margin-top:4px}
+.monthly-scale{display:flex;flex-wrap:wrap;gap:4px 10px;padding:4px 18px 8px;font-size:10px;color:#637a89;align-items:center}
+.monthly-scale i{display:inline-block;width:14px;height:10px;margin-right:4px;border:1px solid #d8e1e7;vertical-align:-1px}
+.monthly-scale em{font-style:normal;color:#8197a4}
+#monthly-daily svg{width:100%;height:auto;display:block}
+#monthly-workspace .chart{padding:6px 12px}
+#monthly-workspace table tr.chosen td{background:#eef7f8;font-weight:600}
+#monthly-workspace table i.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+@media (max-width:760px){.monthly-maps figure{flex-basis:45%}.monthly-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}

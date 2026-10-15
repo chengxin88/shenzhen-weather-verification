@@ -1,0 +1,318 @@
+{
+  "captured_date": "2026-10-15",
+  "source": "WSL Ubuntu verification-test",
+  "files": [
+    {
+      "file": "DATA_QUALITY.md",
+      "sha256": "763ba4775a92f4ee5d43367051649dfad7c4a8c0f7954014b4d7a7d277d64912",
+      "bytes": 6383,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "MODEL_INTERFACES.md",
+      "sha256": "2dac12f493279b8d90345a73344d6d2bfecd1bb1adc342336c3077deaf8d7a1c",
+      "bytes": 3899,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "UI_REFERENCE.md",
+      "sha256": "34d10b2b85d678e9702525edc2077f1bdc2706d7030a4cc420fac4f606af2ccb",
+      "bytes": 1750,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "WN3_DEMO.md",
+      "sha256": "a3605b5c92f328f1ceb2e7908be410646a02a17f97ee95e6c5638819d4f09cac",
+      "bytes": 2125,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "WN3_MODULE_DEMO.md",
+      "sha256": "d44a7da7fd43a925b70e98e41522c126d44a167967539a460c18b624d976e8e9",
+      "bytes": 2653,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "analysis_verification.py",
+      "sha256": "9de2da235ed8f3cf63ecfc27b897eee880f42975fb96a5b99f1fb527379f06a1",
+      "bytes": 31760,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "app.js",
+      "sha256": "1abcf2ccc8c76e9fcef8637f03288c09c438981fc4770861cd68ae007fc756c6",
+      "bytes": 66055,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "backfill_native.py",
+      "sha256": "658aada041874458be2c42b98b7b29f744a44452970522e71d7187347cb4f435",
+      "bytes": 9582,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "backfill_obs.py",
+      "sha256": "7a64beaa96cb2c4bd42d6480abc1204fbd1d17bb8b950c9ce3556063ed8e42ba",
+      "bytes": 2711,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "build_wn3_demo.py",
+      "sha256": "64de0e5ac7f5e71fbecde49c7995651dcb8d25569be12458df750524c0b39138",
+      "bytes": 7745,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "build_wn3_month_demo.py",
+      "sha256": "0faadbafe74bbe086c512ce9a1a3c3eca29560f2ae218fbd4b00223e29352951",
+      "bytes": 9892,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "case.css",
+      "sha256": "fe97a42cb600ec179045a54d754e0327c654e34957647b8cca658d1757e22c49",
+      "bytes": 2288,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "case.js",
+      "sha256": "b935663b365ef438b35566ccf76f0dc0cae6fbe9006ca4668c7b1843ef4db7ab",
+      "bytes": 21838,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "case_api.py",
+      "sha256": "309859b4bd2a2815d5b297d8b880db580a9293ef3e83b664142600735790e3bc",
+      "bytes": 15066,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "case_cache.js",
+      "sha256": "7dbfec428931a49488818958bd981b90e5e6064a5b6ceb90cbe6a541406026aa",
+      "bytes": 2109,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "case_opendata.py",
+      "sha256": "ddc9d22d12b41a66b34153482cfc7a3243dfe538184e1b6ad7b6c1ed0344d728",
+      "bytes": 7727,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "catalog.py",
+      "sha256": "ffa2635168f24aafd0a7a7d0a23f0b04aac1317ea5cf925ea1c2ebfb811dd4c8",
+      "bytes": 11740,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "core.js",
+      "sha256": "299e00245fcb78e7578b8ba2c661adb0d8872551faf6c6edacb1070d0b32d933",
+      "bytes": 12605,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "demo-models.css",
+      "sha256": "94680e101b880d81fd0847028c65e1723298cfa80de4b7865f997f118046d295",
+      "bytes": 500,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "demo-models.js",
+      "sha256": "0c0648ad07bbb30ca3e7f3f62d6269e0d96cf1dd2f6d81199d073c0f8cfc0a1f",
+      "bytes": 11761,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "incremental-qc/qc_monitor.py",
+      "sha256": "8a14228e8b1b2cb55a79cb700b701f2783695f30f6939a904dc43b0c3547ff67",
+      "bytes": 15553,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "incremental-qc/test_qc_monitor.py",
+      "sha256": "306746d83aee2adf7f70919d5d7094fb97018e4cafef042508c2b36ac788e8ed",
+      "bytes": 2589,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "index.html",
+      "sha256": "0cc8985abbf2d79fee4f64645e50a78de03599705b6597c36c0fce9dcdc154c6",
+      "bytes": 13148,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "model-interfaces.css",
+      "sha256": "48a5e6c19e90272bc8b747b852ad12eef348f2f30156ae497498d837263e87ba",
+      "bytes": 3654,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "model-interfaces.js",
+      "sha256": "bd7255e1167f223bb2e03a2d302dbe6069dfe48585558a15d38905075e646837",
+      "bytes": 15835,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "model_interfaces.py",
+      "sha256": "bfa81bd43da2a5fd8afd75ef13b18eab0b9f1b947ab7bc8c4aebd8b867d89df2",
+      "bytes": 16649,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "model_ui_reference.json",
+      "sha256": "9bc9412cdb05ec0012a28ff4a93bcc3c29eb211a3a0acd28c01a079f17472f6b",
+      "bytes": 33492,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "module_demo.py",
+      "sha256": "cb12dacf37cae152a4692fcf4e0410efac5b02bc208067a7163c1ceeddc4a876",
+      "bytes": 2530,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "modules.js",
+      "sha256": "8bf2e53ea44c7dcfda9a5b587f5cb7b5d27f4425691361d7129e5cd5f7e4a3cf",
+      "bytes": 2530,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "monthly.css",
+      "sha256": "ec883db644032fd593ee8a844c1d3c6b176cc2df91b4bf9ca02bb234998056e2",
+      "bytes": 1294,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "monthly.js",
+      "sha256": "6da212047e7ebaf2a4a23f20aed70e772047f52f8cdef2e0d0c5443e4ed7d669",
+      "bytes": 17784,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "monthly_precip.py",
+      "sha256": "98c72c6ba925e2ebcac3d6e8492d8eab1d58d558b9e2928977f10cf0a7e2bf31",
+      "bytes": 10969,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "native_archive.py",
+      "sha256": "77715dc058dce8618911a4f64288fe4e0ded949aadfe91ae2a484c6184bd218b",
+      "bytes": 25814,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "openmeteo_ecmwf.py",
+      "sha256": "201a82da6bbf8298ef9b1b30e4909908f6c8798a7ae2f782c2627e2e2df4acc4",
+      "bytes": 25416,
+      "dereferenced_symlink": true
+    },
+    {
+      "file": "openmeteo_regional.py",
+      "sha256": "001fd2b9af5044c9d329778e285ba53ab594a04e50b4e75eef6f35495457c07f",
+      "bytes": 21538,
+      "dereferenced_symlink": true
+    },
+    {
+      "file": "openmeteo_verification.py",
+      "sha256": "1bb3342a0cecca2327589a4108c3a215e1363067592c41bf5e0184727d40ed6e",
+      "bytes": 14378,
+      "dereferenced_symlink": true
+    },
+    {
+      "file": "quality.css",
+      "sha256": "03ca5063479be87c385cbd1227a6e486c7b17db46ba321c52caf796e026c1e5d",
+      "bytes": 6448,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "quality.js",
+      "sha256": "208bcc19994e7a691b1af94a09c4ba6fbd8539c211ba4d22186a5317dd4e4126",
+      "bytes": 24806,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "quality_control.py",
+      "sha256": "2e71b77458d13c509249d3e85bf4813278c9ff3006eada52906739c175ec81b0",
+      "bytes": 55967,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "realtime-alert/qc_alert_monitor.py",
+      "sha256": "53a974707e4fcb26c4f5b301a5d222fdc9ceb24abcf35218889c1371a59080e7",
+      "bytes": 30716,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "server.py",
+      "sha256": "5de5ff9fee00461e5f8a47a7d66cdf5201a6c26eefab9d4c9e2af903b91c2a13",
+      "bytes": 13063,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "style.css",
+      "sha256": "3c8905c02a2e56e120f6df595f02bab7e9cbad8b465c3c463da5c2d81f58dec6",
+      "bytes": 24751,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_demo_core.js",
+      "sha256": "5a202d034c018f48169aa61b7b0db81f509c0b74b4962bb7a54473eadc9d7dd2",
+      "bytes": 2109,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_model_interfaces.py",
+      "sha256": "1294c235ab7a36d80eb9b6af7c5114864f4447cb4d59291f16935c34fc3a0fa5",
+      "bytes": 10518,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_module_demo.py",
+      "sha256": "5ba4cf216f054a560024e2776ed4b12611c595d4cef49eec326b71494b490ed6",
+      "bytes": 7492,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_quality_control.py",
+      "sha256": "be85b558839f9ed4d513de00dda3c040bd790d6bb6d90013de00938eee95f27d",
+      "bytes": 24264,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_quality_http.py",
+      "sha256": "a0cd1356cffb4787c1fe6b611b8824f68076e04b8d84d5835948844f91596150",
+      "bytes": 3937,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_wn3_demo.py",
+      "sha256": "1225d69e42d02ccc2d3b7e45f3a8b2a6280f898dffa0b5dba538446dca3ef510",
+      "bytes": 8457,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "typhoon.css",
+      "sha256": "2631f6aecf597028bd1a13fcfbbef6904a673ee945ca3d45acb3cdbf1450732c",
+      "bytes": 2448,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "typhoon.js",
+      "sha256": "da5a8cf1e4720e04adc09b0ab29eac793c30ff43c3fdaef0f6f77996c98abaff",
+      "bytes": 17941,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "typhoon_api.py",
+      "sha256": "826482223fc573c062743520b882f5bb125a371ec91dbebbc13e12a6809c6aee",
+      "bytes": 11211,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "wn3_demo.py",
+      "sha256": "96e62491649efcb968781b74fec81cf00092595c619141bacf33b552d3d5067a",
+      "bytes": 3084,
+      "dereferenced_symlink": false
+    }
+  ]
+}
