@@ -1,0 +1,15 @@
+[Unit]
+Description=Published weather data QC alert queue
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/chengyang/verification-test
+ExecStartPre=/usr/bin/timeout 8 /usr/bin/python3 /usr/local/libexec/weather-storage-guard.py --ready
+ExecStart=/usr/bin/python3 /home/chengyang/verification-test/realtime-alert/qc_alert_monitor.py --tick
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=QC_ALERT_MIN_GAP=120
+Environment=QC_ALERT_PERIODIC=3600
+Environment=QC_ALERT_SCAN_TIMEOUT=240
+TimeoutStartSec=300
+Nice=10
+UMask=0077

@@ -102,11 +102,12 @@
   }
   function comparisonCatalog(input){
     // A display-only union. Original datasets and all scoring values remain intact.
-    const datasets=input.datasets.filter(d=>d.source!=='comparison'),ids=new Set(datasets.map(d=>d.id));
+    const hidden=['GDAS 分析场'];  // GDAS 暂不展示；清空此数组即可恢复
+    const datasets=input.datasets.filter(d=>!d.pilot&&d.source!=='comparison'&&!hidden.some(h=>String(d.reference||"").startsWith(h))),ids=new Set(datasets.map(d=>d.id));
     const rows=input.rows.filter(r=>ids.has(r.dataset)),groups=new Map(),extraSets=[],extraRows=[];
     const uniq=items=>[...new Set(items)];
     for(const d of datasets){
-      if(d.pilot||!['hk','weekly','lead'].includes(d.source))continue;
+      if(!['hk','weekly','lead'].includes(d.source))continue;
       const key=JSON.stringify([d.kind,d.accumulation??null,d.level??null,d.reference,d.region,...(d.kind==='地面'?[d.element]:[])]);
       if(!groups.has(key))groups.set(key,[]);groups.get(key).push(d);
     }
@@ -139,12 +140,12 @@
         leads:uniq(items.map(r=>r.lead)).sort((a,b)=>a-b),thresholds:uniq(items.map(r=>r.threshold).filter(t=>t!==null&&t!==undefined)).sort((a,b)=>a-b),
         updated:sets.map(d=>d.updated).sort().at(-1),
         source_note:[...uniq(sets.filter(d=>d.source==='hk').map(d=>d.source_note).filter(Boolean)),'其他模式使用原 GRIB 评分。同一时次的原 GRIB 记录优先使用逐时次汇总批次，整批选取，不补拼缺失模式。共同有效时间不等于已验证严格共同格点；各模式保留原评分与来源。'].join(' ')});
-      extraRows.push(...items.map(r=>({...r,dataset:id,source_dataset:r.dataset})));
+      for(const r of items)extraRows.push({...r,dataset:id,source_dataset:r.dataset});
     }
     return {...input,datasets:[...extraSets,...datasets],rows:[...rows,...extraRows]};
   }
   function unifiedCatalog(input){
-    if(input.origins&&input.datasets.every(d=>d.source==='unified'))return input;
+    if(input.origins&&input.datasets.every(d=>d.source==='unified'&&!d.pilot))return input;
     const prepared=comparisonCatalog(input);
     const origins=prepared.datasets.filter(d=>d.source!=='comparison');
     const combined=prepared.datasets.filter(d=>d.source==='comparison');
@@ -154,12 +155,12 @@
     for(const d of groups){
       // Identity follows scientific conditions, so a channel appearing or
       // disappearing does not reset the user's selected period or models.
-      const id='unified:'+JSON.stringify([d.kind,d.accumulation??null,d.level??null,d.reference,d.region,...(d.kind==='地面'?[d.element]:[])])+(d.pilot?':weathernext3-pilot':'');
+      const id='unified:'+JSON.stringify([d.kind,d.accumulation??null,d.level??null,d.reference,d.region,...(d.kind==='地面'?[d.element]:[])]);
       const items=prepared.rows.filter(r=>r.dataset===d.id),source_ids=d.source_ids||[d.id];
       datasets.push({...d,id,original_source:d.source,source:'unified',source_ids,aliases:[d.id,...source_ids],
         has_n:items.some(r=>Number.isFinite(r.n)),
-        source_note:(d.pilot||d.source==='analysis')?d.source_note:[d.source_note,'资料自动整合并去重，同一时次保留完整计算批次，不补拼缺失模式。共同有效时间不等于已验证完全相同的格点；各模式保留原始评分。'].filter(Boolean).join(' ')});
-      rows.push(...items.map(r=>({...r,dataset:id,source_dataset:r.source_dataset||r.dataset})));
+        source_note:d.source==='analysis'?d.source_note:[d.source_note,'资料自动整合并去重，同一时次保留完整计算批次，不补拼缺失模式。共同有效时间不等于已验证完全相同的格点；各模式保留原始评分。'].filter(Boolean).join(' ')});
+      for(const r of items)rows.push({...r,dataset:id,source_dataset:r.source_dataset||r.dataset});
     }
     return {...input,datasets,rows,origins};
   }

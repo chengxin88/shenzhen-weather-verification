@@ -1,0 +1,10 @@
+[Unit]
+Description=ECMWF ENS mean fetch twice a day after each 00/12 UTC run (09:10/21:10 UTC)
+
+[Timer]
+OnCalendar=*-*-* 09,21:10:00 UTC
+Persistent=true
+Unit=weather-ecens.service
+
+[Install]
+WantedBy=timers.target

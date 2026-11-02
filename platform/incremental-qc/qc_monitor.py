@@ -111,7 +111,7 @@ def check_frame(p,started):
         else:
             manifest_data=json.loads(manifest.read_text());directory=manifest_data.get('native_cache_directory')
             committed={f['lead'] for f in manifest_data.get('frames',[])}
-            if directory not in ('native-score-v1','native-china-v1','native-southern-china-v1'):
+            if directory not in ('native-score-v1','native-china-v1','native-southern-china-v1','native-southern-china-v2'):
                 problems.append(('warning','unsupported native cache directory'))
             elif lead not in committed:
                 return {'status':'pending','detail':['native hour not yet committed'],'arrays':arrays}

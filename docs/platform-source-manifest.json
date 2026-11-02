@@ -1,6 +1,6 @@
 {
-  "captured_date": "2026-10-15",
-  "source": "WSL Ubuntu verification-test",
+  "captured_date": "2026-11-02",
+  "source": "WSL Ubuntu verification-test (git 7e8a284)",
   "files": [
     {
       "file": "DATA_QUALITY.md",
@@ -12,6 +12,30 @@
       "file": "MODEL_INTERFACES.md",
       "sha256": "2dac12f493279b8d90345a73344d6d2bfecd1bb1adc342336c3077deaf8d7a1c",
       "bytes": 3899,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "STATIONS.md",
+      "sha256": "02f5c7959c4c2d7d81462ea1e82f4916c03e6b631ec76e56c27423245b32542e",
+      "bytes": 22249,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "STATION_GRID_UNIFY_REPORT.md",
+      "sha256": "bf5be8b435024db981f6aa747406ac11c64dfe2c51ef7d970d29cbd075496b24",
+      "bytes": 8060,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "STATION_INCREMENTAL_REPORT.md",
+      "sha256": "5bc5f344936bea492cde97a4c06aea64d2a697fa1383ba32e12695aae219ba48",
+      "bytes": 20243,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "STATION_MAP.md",
+      "sha256": "40f6a7d7314d351e590a125b48d8f74f0ad0625047ba98c66d650749ba1fc4eb",
+      "bytes": 1742,
       "dereferenced_symlink": false
     },
     {
@@ -34,14 +58,20 @@
     },
     {
       "file": "analysis_verification.py",
-      "sha256": "9de2da235ed8f3cf63ecfc27b897eee880f42975fb96a5b99f1fb527379f06a1",
-      "bytes": 31760,
+      "sha256": "0d19c39528983971fc45f77c9bdddf060f40f8819d9260469924b9f74db80a17",
+      "bytes": 32435,
       "dereferenced_symlink": false
     },
     {
       "file": "app.js",
-      "sha256": "1abcf2ccc8c76e9fcef8637f03288c09c438981fc4770861cd68ae007fc756c6",
-      "bytes": 66055,
+      "sha256": "b57f802969989f40a9731f62400f591435c18888d6e34960af059a0898c9f23c",
+      "bytes": 74278,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "backfill_finish.sh",
+      "sha256": "ab8232c8dd92fc76eb855531dc018f94c4bc3113318613dfbf8e88832a672312",
+      "bytes": 361,
       "dereferenced_symlink": false
     },
     {
@@ -54,6 +84,18 @@
       "file": "backfill_obs.py",
       "sha256": "7a64beaa96cb2c4bd42d6480abc1204fbd1d17bb8b950c9ce3556063ed8e42ba",
       "bytes": 2711,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "build_station_basemap.py",
+      "sha256": "538865aeb52052ec61a71dcbb8de9e04c228d78c674b15e82e6b714400273f8e",
+      "bytes": 2771,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "build_stations.py",
+      "sha256": "62e3d20a75c7baa104b4df7116388870422926d6cf133f098b50d9a45d81ecb8",
+      "bytes": 3270,
       "dereferenced_symlink": false
     },
     {
@@ -70,7 +112,7 @@
     },
     {
       "file": "case.css",
-      "sha256": "fe97a42cb600ec179045a54d754e0327c654e34957647b8cca658d1757e22c49",
+      "sha256": "dad772d1e8f139f003177d95c1f5cf1f806b3ae8402d37e6c1eca9c9a9758338",
       "bytes": 2288,
       "dereferenced_symlink": false
     },
@@ -100,14 +142,14 @@
     },
     {
       "file": "catalog.py",
-      "sha256": "ffa2635168f24aafd0a7a7d0a23f0b04aac1317ea5cf925ea1c2ebfb811dd4c8",
-      "bytes": 11740,
+      "sha256": "883cc86e9ecd4c03f7f0901b929a9e9034d9a6fe5b82cb83f842f9e6457ad2fe",
+      "bytes": 11452,
       "dereferenced_symlink": false
     },
     {
       "file": "core.js",
-      "sha256": "299e00245fcb78e7578b8ba2c661adb0d8872551faf6c6edacb1070d0b32d933",
-      "bytes": 12605,
+      "sha256": "ceb7d69813495d1105818c7a7b900dd6b02f35e192aa3eb9cb47b31647b3e39d",
+      "bytes": 12719,
       "dereferenced_symlink": false
     },
     {
@@ -118,14 +160,68 @@
     },
     {
       "file": "demo-models.js",
-      "sha256": "0c0648ad07bbb30ca3e7f3f62d6269e0d96cf1dd2f6d81199d073c0f8cfc0a1f",
-      "bytes": 11761,
+      "sha256": "c102981301447ac0446fa344552d01982c8db7af3e07818523e2dfaa238080a9",
+      "bytes": 11865,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "deploy/weather-ecens.service",
+      "sha256": "e81c7d3b100ae96aeba298aeceed909c9e05fe83d8f7bb1858329a629081351b",
+      "bytes": 526,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "deploy/weather-ecens.timer",
+      "sha256": "87b3af9f9cadbaf670615a0fcfbc9431ff64d647da7dd392af5ed80e7e2598bf",
+      "bytes": 214,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "deploy/weather-gefs.service",
+      "sha256": "e18b1bcb4d21253ded4fc53d3c5ad6392d27c416cfddbe3b79b54ce534a33610",
+      "bytes": 523,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "deploy/weather-gefs.timer",
+      "sha256": "2af1a6b1afbd0d218e70600eb558342b14dfbb316120f531739d469975249dde",
+      "bytes": 205,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "deploy/weather-stations.service",
+      "sha256": "cb828489f5d6f6208153102fedcb338466081717d4d23248b24a0f5b5477b6f3",
+      "bytes": 836,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "deploy/weather-stations.timer",
+      "sha256": "f2b3b5a91044fb3c3d2a7dee2c28e70d784a1199a811c43ede814cd17b724500",
+      "bytes": 212,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "fetch_ecmwf_ens.py",
+      "sha256": "d5534e1926e40b8e83499e0592cbac098f18a3a3e7fcc63511f2d99a267e0019",
+      "bytes": 6854,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "fetch_gefs.py",
+      "sha256": "3119e964da67dabdcee2bcd9a4557591f7fd6b5118d75a1b800f5f81e8dc74d8",
+      "bytes": 7030,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "grid-stations.js",
+      "sha256": "0d263e0d59b2a80dfe7eec93ac886fbd2723e29888cd89b687e18f59f0d5ea69",
+      "bytes": 10404,
       "dereferenced_symlink": false
     },
     {
       "file": "incremental-qc/qc_monitor.py",
-      "sha256": "8a14228e8b1b2cb55a79cb700b701f2783695f30f6939a904dc43b0c3547ff67",
-      "bytes": 15553,
+      "sha256": "026256640f12e57b1f7f4d9794361024a708eb2859402393fe291624d7e4d6df",
+      "bytes": 15580,
       "dereferenced_symlink": false
     },
     {
@@ -135,14 +231,20 @@
       "dereferenced_symlink": false
     },
     {
+      "file": "incremental-qc/weather-incremental-qc.service",
+      "sha256": "981d069dff686f50e33933751be736de0fb773793ea1ef5e8c707c9f1eb496b3",
+      "bytes": 416,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "index.html",
-      "sha256": "0cc8985abbf2d79fee4f64645e50a78de03599705b6597c36c0fce9dcdc154c6",
-      "bytes": 13148,
+      "sha256": "2a06813e832a6cdae051be398fd4e5d9baebad53540de036d12bbdbb223c70d5",
+      "bytes": 13838,
       "dereferenced_symlink": false
     },
     {
       "file": "model-interfaces.css",
-      "sha256": "48a5e6c19e90272bc8b747b852ad12eef348f2f30156ae497498d837263e87ba",
+      "sha256": "c8cf3c0a103168f3292757bd3c3341126c4ec9fbfdd192c4d765a177159720e5",
       "bytes": 3654,
       "dereferenced_symlink": false
     },
@@ -172,13 +274,13 @@
     },
     {
       "file": "modules.js",
-      "sha256": "8bf2e53ea44c7dcfda9a5b587f5cb7b5d27f4425691361d7129e5cd5f7e4a3cf",
-      "bytes": 2530,
+      "sha256": "3e875e8090075d2088bbe2301d538e0eb68e5304f42dd23f2577321fd91e3f60",
+      "bytes": 2832,
       "dereferenced_symlink": false
     },
     {
       "file": "monthly.css",
-      "sha256": "ec883db644032fd593ee8a844c1d3c6b176cc2df91b4bf9ca02bb234998056e2",
+      "sha256": "45b03edc0fcee6b9b2400f29f309151afce9848988e20c3c2d56e49a09305d6b",
       "bytes": 1294,
       "dereferenced_symlink": false
     },
@@ -196,8 +298,8 @@
     },
     {
       "file": "native_archive.py",
-      "sha256": "77715dc058dce8618911a4f64288fe4e0ded949aadfe91ae2a484c6184bd218b",
-      "bytes": 25814,
+      "sha256": "0fec21b7b4d2fa63718b468d1c950ef69a9992834bc91da44797b48372ab8269",
+      "bytes": 30888,
       "dereferenced_symlink": false
     },
     {
@@ -220,8 +322,8 @@
     },
     {
       "file": "quality.css",
-      "sha256": "03ca5063479be87c385cbd1227a6e486c7b17db46ba321c52caf796e026c1e5d",
-      "bytes": 6448,
+      "sha256": "d09412ab97093ff678cf1a3a7812ae4913523b272ff7398930f3d56ad866d099",
+      "bytes": 6449,
       "dereferenced_symlink": false
     },
     {
@@ -232,32 +334,140 @@
     },
     {
       "file": "quality_control.py",
-      "sha256": "2e71b77458d13c509249d3e85bf4813278c9ff3006eada52906739c175ec81b0",
-      "bytes": 55967,
+      "sha256": "080e1b2e68f6d25ee01a35b2b0dbab9136f59dcf472fc797f885d72838aba764",
+      "bytes": 56067,
       "dereferenced_symlink": false
     },
     {
       "file": "realtime-alert/qc_alert_monitor.py",
-      "sha256": "53a974707e4fcb26c4f5b301a5d222fdc9ceb24abcf35218889c1371a59080e7",
-      "bytes": 30716,
+      "sha256": "f23b20a48c4a38470e0360092538cb998c822dbcfb3757592be02869b4c7649d",
+      "bytes": 33338,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "realtime-alert/weather-qc-alert.service",
+      "sha256": "ad71fb794eda47cd63f76e1b0232bd7f14662dd9a033c7b288db8f09fef34fd9",
+      "bytes": 519,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "realtime-alert/weather-qc-alert.timer",
+      "sha256": "327f87d909082d7816f348b697b1b784bf35d65afa1265f230cddb22aae82f59",
+      "bytes": 185,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "refresh_stations.py",
+      "sha256": "313c2e034f1f31eaa1b05a9861d1abb10e867de0e8ad47f303edd09aee01d969",
+      "bytes": 4480,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "run_preview.sh",
+      "sha256": "03ff6cba2c20e99daccb4447f604520919dc4982cd58b6b74acc4ae2459aec4e",
+      "bytes": 588,
       "dereferenced_symlink": false
     },
     {
       "file": "server.py",
-      "sha256": "5de5ff9fee00461e5f8a47a7d66cdf5201a6c26eefab9d4c9e2af903b91c2a13",
-      "bytes": 13063,
+      "sha256": "55beff86ba3e6d80ca9854d2d7f7a353d06279aaf7e603e8a44f864f6ee4cc1c",
+      "bytes": 15801,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station-basemap.json",
+      "sha256": "09d9d428e16d4ba43ba6eb0be97334b9b53d0be4b0e3b7f2dc8e9e49fb193ae0",
+      "bytes": 53298,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_alerts.py",
+      "sha256": "96a5facad95363cb04633d8f9376cfcfbead61d49412f760822cc7c1b181490e",
+      "bytes": 2957,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_api.py",
+      "sha256": "ae5b11e23c011626d52e7d2781cdc064fc58b167be09c708b0bb4c67462a80e8",
+      "bytes": 13876,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_common.py",
+      "sha256": "e50b67d140ab7e212be4e193a3e9f75482c52c46766b250671b4f53f3f594fba",
+      "bytes": 4022,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_forecasts.py",
+      "sha256": "e50a552dea7553985bca57e426f96a51c16ce23b01459cc5486c545080c2c607",
+      "bytes": 38945,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_obs.py",
+      "sha256": "4b72f6469dbcf7b1e89776c5d31cc3f961ae0dc8404cc418d74eaae12af7f7a3",
+      "bytes": 15748,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_precision.py",
+      "sha256": "f3bfae405039f88389fe3571346cab42d40c99a42ba4c06caf16e07cc428e71f",
+      "bytes": 5877,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_score.py",
+      "sha256": "440205e0935a98949cdb9ff400c430fa63577e288d54f3c29f796780d006ab23",
+      "bytes": 40946,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "station_sources.py",
+      "sha256": "eab376bc0459c9c165589c5adca72fd5941145da12783871bed8c7e22b2d9cf6",
+      "bytes": 10388,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "stations.css",
+      "sha256": "1c1fc51fe747f8526d4a43f9f2c929929f26bcab508ddd19e8cfe8da4861d999",
+      "bytes": 4481,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "stations.js",
+      "sha256": "87f369998cda4c98754875c5ae265b13732f1946f3878b85cf61815e60fc92c6",
+      "bytes": 18806,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "stations.json",
+      "sha256": "9cb4d6c53a2461075643aac6028c64dc6e858adcba863f40b9c8d435a2d40146",
+      "bytes": 29336,
       "dereferenced_symlink": false
     },
     {
       "file": "style.css",
-      "sha256": "3c8905c02a2e56e120f6df595f02bab7e9cbad8b465c3c463da5c2d81f58dec6",
-      "bytes": 24751,
+      "sha256": "33a3432f631dcd431cb602d95ac510cf35e6897195b243693cad95ff5474df22",
+      "bytes": 26319,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "synop_decode.py",
+      "sha256": "4d1b8a00f9038cdf84a7d6402957caada81be51cab0878c791574778e7f2fa9d",
+      "bytes": 8099,
       "dereferenced_symlink": false
     },
     {
       "file": "test_demo_core.js",
       "sha256": "5a202d034c018f48169aa61b7b0db81f509c0b74b4962bb7a54473eadc9d7dd2",
       "bytes": 2109,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_grid_stations_frontend.js",
+      "sha256": "0bb4a5d99f11386379a735fbe37f9424f23f01d629585cafda8c8409e82db11d",
+      "bytes": 14753,
       "dereferenced_symlink": false
     },
     {
@@ -285,14 +495,86 @@
       "dereferenced_symlink": false
     },
     {
+      "file": "test_station_alerts.py",
+      "sha256": "a57d9fc46657e420230ef9e2b9e9711c521d95550756f51571fc40c591c03a53",
+      "bytes": 5963,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_station_basemap.py",
+      "sha256": "5a57f8dbd6b4edae6ab6d6dd37db02ec1d948508b247f5ae095a2bfa170490af",
+      "bytes": 3125,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_station_discover.py",
+      "sha256": "3fb2ff3c97c2e5a957697b997d4a98be711e3bcdacae7efe2702fe203ebb4b5c",
+      "bytes": 1388,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_station_grid.py",
+      "sha256": "b3d4aa5462608bade656046c2d94ef91e549ddad87b3ae104b68819d3ca170f6",
+      "bytes": 14314,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_station_incremental.py",
+      "sha256": "d40474ba9fe0e719064b03fc1512f75cb22faeb729c16c3407c02136e097e8b0",
+      "bytes": 24178,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_station_region.py",
+      "sha256": "59af4968a1eaf01a5de99ab48947e5ee91de5f111c4b5717d4359facd1b373a7",
+      "bytes": 8648,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_station_systems.js",
+      "sha256": "19f4f030880c5248fd42ecb74a50fc5fa50ab839479b9a7af77dce4de9488f65",
+      "bytes": 8093,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_stations.py",
+      "sha256": "3138c59f152944d71c6618790e66808774b3fc511ab3f6745a5b5040ace3a656",
+      "bytes": 23125,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_stations_frontend.js",
+      "sha256": "2fb2e8acf2321763751cb7ef62493ac26e96f92d852504df0be2f130bc7a0e95",
+      "bytes": 8176,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "test_wn3_demo.py",
       "sha256": "1225d69e42d02ccc2d3b7e45f3a8b2a6280f898dffa0b5dba538446dca3ef510",
       "bytes": 8457,
       "dereferenced_symlink": false
     },
     {
+      "file": "tools/benchmark_station_run.py",
+      "sha256": "1347a130a245a3e6bbf3240efad2cc2d455665a78b507d9e9839a7e17d5d5c1d",
+      "bytes": 4561,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "tools/compare_station_runs.py",
+      "sha256": "4de606cda1ce624323d9e43565fe1fed47de9f7e37f3dc65f22e0b6934d1fe3d",
+      "bytes": 7027,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "tools/freeze_station_cache.py",
+      "sha256": "06d3d4c305249dc86bc1963598d05ab91a0e33b733819965e5ff14044e48af26",
+      "bytes": 3099,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "typhoon.css",
-      "sha256": "2631f6aecf597028bd1a13fcfbbef6904a673ee945ca3d45acb3cdbf1450732c",
+      "sha256": "6421907931b2b0a25bb1d8abec75ac8525e3680b149a5a2b668a8db8d3ee5131",
       "bytes": 2448,
       "dereferenced_symlink": false
     },

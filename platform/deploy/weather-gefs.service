@@ -1,0 +1,16 @@
+[Unit]
+Description=NOAA GEFS ensemble-mean (geavg 0.25°) frames for the verification platform
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/chengyang/verification-test
+ExecStart=/home/chengyang/.venvs/ec-gfs-server/bin/python /home/chengyang/verification-test/fetch_gefs.py --days 3 --workers 4
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=DL_PROXY=http://127.0.0.1:17908
+MemoryMax=1G
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3600
+NoNewPrivileges=yes

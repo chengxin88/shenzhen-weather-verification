@@ -4,8 +4,8 @@
 .monthly-maps{display:flex;flex-wrap:wrap;gap:10px;padding:12px 18px 4px}
 .monthly-maps figure{margin:0;flex:1 1 230px;max-width:330px;border:1px solid #e3eaef;border-radius:4px;padding:6px;background:#fbfdfe}
 .monthly-maps canvas{width:100%;height:auto;image-rendering:pixelated;display:block;background:#f2f5f8}
-.monthly-maps figcaption{font-size:11px;color:#526f80;text-align:center;margin-top:4px}
-.monthly-scale{display:flex;flex-wrap:wrap;gap:4px 10px;padding:4px 18px 8px;font-size:10px;color:#637a89;align-items:center}
+.monthly-maps figcaption{font-size:13px;color:#526f80;text-align:center;margin-top:4px}
+.monthly-scale{display:flex;flex-wrap:wrap;gap:4px 10px;padding:4px 18px 8px;font-size:11px;color:#637a89;align-items:center}
 .monthly-scale i{display:inline-block;width:14px;height:10px;margin-right:4px;border:1px solid #d8e1e7;vertical-align:-1px}
 .monthly-scale em{font-style:normal;color:#8197a4}
 #monthly-daily svg{width:100%;height:auto;display:block}

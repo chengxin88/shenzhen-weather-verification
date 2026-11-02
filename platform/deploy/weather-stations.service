@@ -1,0 +1,23 @@
+[Unit]
+Description=Weather station observation refresh and offline verification
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/chengyang/verification-test
+ExecStart=/home/chengyang/.venvs/ec-gfs-server/bin/python /home/chengyang/verification-test/refresh_stations.py
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=STATIONS_ALERTS=1
+Environment=STATIONS_CACHE_DIR=/home/chengyang/verification-test/cache/stations
+Environment=HTTP_PROXY=http://127.0.0.1:17908
+Environment=HTTPS_PROXY=http://127.0.0.1:17908
+Environment=http_proxy=http://127.0.0.1:17908
+Environment=https_proxy=http://127.0.0.1:17908
+Environment=NO_PROXY=localhost,127.0.0.1,::1
+Environment=no_proxy=localhost,127.0.0.1,::1
+MemoryMax=1G
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=10200
+NoNewPrivileges=yes

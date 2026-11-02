@@ -1,7 +1,10 @@
 """Loopback-only preview/production server behind the existing login gateway."""
 import argparse
+import gzip
 import json
+import os
 import re
+import shutil
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +31,11 @@ def rebuild():
 
 def catalog_bytes(refresh=False):
     global refreshing
+    if os.environ.get('VERIFICATION_READ_ONLY')=='1':
+        # A preview may read the published production grid snapshot, but must
+        # never follow the normal catalog rebuild/refresh path.
+        source=Path(os.environ.get('VERIFICATION_PREVIEW_DATA_ROOT',str(ROOT)))/'native-catalog.json'
+        return source.read_bytes() if source.is_file() else b'{"version":2,"datasets":[],"rows":[]}'
     with lock:
         current,stale=snapshot,snapshot is None or time.monotonic()-loaded>300
         previous_load=loaded
@@ -45,6 +53,23 @@ def catalog_bytes(refresh=False):
     raise RuntimeError('catalog not ready')
 
 class Handler(BaseHTTPRequestHandler):
+    def send_station_rows(self, path):
+        # Stream the offline product; never retain decoded station rows in the process.
+        compressed = any(part.split(';')[0].strip().lower() in ('gzip', '*') and
+                         not re.search(r';\s*q=0(?:\.0*)?(?:\s*;|\s*$)', part)
+                         for part in self.headers.get('Accept-Encoding', '').split(','))
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store, private')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Vary', 'Accept-Encoding')
+        if compressed:
+            self.send_header('Content-Encoding', 'gzip')
+            self.send_header('Content-Length', str(path.stat().st_size))
+        self.end_headers()
+        with (path.open('rb') if compressed else gzip.open(path, 'rb')) as handle:
+            shutil.copyfileobj(handle, self.wfile, length=65536)
+
     def send_json(self,value,status=200):
         data=json.dumps(value,ensure_ascii=False,allow_nan=False).encode('utf-8')
         self.send_response(status)
@@ -55,6 +80,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(data)
     def do_POST(self):
         path=urlsplit(self.path).path
+        if os.environ.get('VERIFICATION_READ_ONLY')=='1':
+            self.send_json({'error':'预览服务只读；资料由独立脚本准备。'},405);return
         if path not in [PREFIX+'api/case/score',PREFIX+'api/typhoon/score',PREFIX+'api/quality-control/refresh']: self.send_error(404); return
         origin=self.headers.get('Origin')
         if origin and urlsplit(origin).netloc!=self.headers.get('Host'):
@@ -79,6 +106,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception: self.send_json({'error':'检验数据源暂不可用，请稍后重试。'},503)
     def do_GET(self):
         path=urlsplit(self.path).path
+        station_root=PREFIX+'api/stations/'
+        if path.startswith(station_root):
+            try:
+                import station_api
+                value = station_api.dispatch(path[len(station_root):],urlsplit(self.path).query)
+                if isinstance(value, Path): self.send_station_rows(value)
+                else: self.send_json(value)
+            except KeyError:self.send_json({'error':'未知站点接口。'},404)
+            except ValueError as exc:self.send_json({'error':str(exc)},400)
+            except Exception:self.send_json({'error':'站点结果暂不可用，请稍后读取。'},503)
+            return
+        if os.environ.get('VERIFICATION_READ_ONLY')=='1' and path.startswith(PREFIX+'api/') and path!=PREFIX+'api/catalog':
+            self.send_json({'error':'此预览只读取已发布目录和站点结果。'},503);return
         if path==PREFIX+'api/quality-control/catalog':
             if urlsplit(self.path).query:
                 self.send_json({'error':'质控目录不接受外部查询参数。'},400);return
@@ -201,6 +241,8 @@ class Handler(BaseHTTPRequestHandler):
             data=(ROOT/'quality.js').read_bytes();mime='text/javascript'
         elif path==PREFIX+'quality.css':
             data=(ROOT/'quality.css').read_bytes();mime='text/css'
+        elif path in (PREFIX+'stations.js',PREFIX+'stations.css',PREFIX+'grid-stations.js'):
+            name=path.rsplit('/',1)[-1];data=(ROOT/name).read_bytes();mime='text/javascript' if name.endswith('.js') else 'text/css'
         elif path in names:
             name,mime=names[path]; data=(ROOT/name).read_bytes()
         else:
@@ -219,6 +261,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(); parser.add_argument('--port',type=int,default=8512)
     args=parser.parse_args()
-    with lock: refreshing=True
-    threading.Thread(target=rebuild,daemon=True).start()
+    if os.environ.get('VERIFICATION_READ_ONLY')!='1':
+        with lock: refreshing=True
+        threading.Thread(target=rebuild,daemon=True).start()
     ThreadingHTTPServer(('127.0.0.1',args.port),Handler).serve_forever()

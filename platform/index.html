@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>气象模式检验 · 测试平台</title><link rel="stylesheet" href="./style.css?v=model-systems-20261015"><link rel="stylesheet" href="./case.css?v=opendata-case-v10"><link rel="stylesheet" href="./typhoon.css?v=native-typhoon-v1"><link rel="stylesheet" href="./monthly.css?v=monthly-precip-v1"><link rel="stylesheet" href="./model-interfaces.css?v=20261013"><link rel="stylesheet" href="./demo-models.css?v=20261013"><link rel="stylesheet" href="./quality.css?v=20261013"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>气象模式检验 · 测试平台</title><link rel="stylesheet" href="./style.css?v=no-dropdown-20261018"><link rel="stylesheet" href="./case.css?v=font-larger-20261018"><link rel="stylesheet" href="./typhoon.css?v=font-larger-20261018"><link rel="stylesheet" href="./monthly.css?v=font-larger-20261018"><link rel="stylesheet" href="./model-interfaces.css?v=font-larger-20261018"><link rel="stylesheet" href="./demo-models.css?v=20261013"><link rel="stylesheet" href="./quality.css?v=font-larger-20261018"><link rel="stylesheet" href="./stations.css?v=station-cards-20261027"></head>
 <body>
 <aside class="sidebar">
   <a class="brand" href="./"><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M3 24h5l6-15 7 23 6-17 6 9"/></svg><span>气象检验平台<small>WEATHER VERIFICATION</small></span></a>
@@ -7,7 +7,7 @@
   <nav aria-label="检验要素"><button data-kind="降水" class="nav-item active"><span>☂</span>降水检验</button><button data-kind="气温" class="nav-item"><span>°C</span>气温检验</button><button data-kind="地面" class="nav-item"><span>⇣</span>地面检验</button><button data-kind="环流" class="nav-item"><span>≋</span>环流检验</button></nav>
   <p class="nav-label">专项检验</p>
   <nav class="specialist-nav" aria-label="专项检验"><button type="button" data-module="case" class="nav-item" aria-pressed="false"><span aria-hidden="true">◎</span>个例检验</button><button type="button" data-module="typhoon" class="nav-item" aria-pressed="false"><span aria-hidden="true">◉</span>台风检验</button><button type="button" data-module="monthly" class="nav-item" aria-pressed="false"><span aria-hidden="true">▦</span>月降水检验</button></nav>
-  <p class="nav-label">模式管理</p><nav aria-label="模式管理"><button type="button" data-module="interfaces" class="nav-item" aria-pressed="false"><span aria-hidden="true">⊞</span>模式接入</button></nav>
+  <nav aria-label="站点检验"><button type="button" data-module="stations" class="nav-item" aria-pressed="false"><span aria-hidden="true">⌖</span>站点检验</button></nav>
   <p class="nav-label">数据管理</p><nav aria-label="数据管理"><button type="button" data-module="quality" class="nav-item" aria-pressed="false"><span aria-hidden="true">✓</span>数据质控</button></nav>
   <p class="nav-label">关联平台</p><a class="nav-link" href="/Verification/compare/" target="_blank" rel="noopener noreferrer">模式与 ERA5 对比 ↗</a><a class="nav-link" href="/Verification/compare/case/">历史个例 · 三屏对比 ↗</a><a class="nav-link" href="/Verification/" target="_self">原平台 →</a>
   <div class="sidebar-bottom">SZVERIFY <span>试验版 02</span></div>
@@ -21,9 +21,11 @@
     <section id="typhoon-workspace" hidden aria-label="台风检验"></section>
     <section id="interfaces-workspace" hidden aria-label="模式接入"></section>
     <section id="quality-workspace" hidden aria-label="数据质控"></section>
+    <section id="stations-workspace" class="stations-view" hidden aria-label="站点检验"></section>
     <div id="grid-workspace">
     <div class="page-heading"><div><h1 id="page-title">降水检验</h1></div><div id="catalog-status-wrap" class="coverage-label"><span id="catalog-status" role="status">读取资料…</span></div></div>
     <div id="load-error" class="notice error" hidden></div>
+    <div id="grid-source-bar" class="grid-source-bar" hidden><span>检验资料</span><div class="choice-buttons" role="group" aria-label="检验参考资料"><button type="button" data-grid-reference="grid" aria-pressed="true">格点</button><button type="button" data-grid-reference="station" aria-pressed="false">站点</button></div></div>
     <section class="filter-card" aria-label="检验条件">
       <select id="dataset" aria-label="内部归档状态" hidden></select>
       <div id="reference-filters" class="primary-filters reference-filters" hidden><div class="filter-field"><span>参考资料</span><div id="reference-switch" class="choice-buttons" role="group" aria-label="检验参考资料"></div></div></div>
@@ -69,9 +71,10 @@
       <div id="chart" class="chart" role="region" aria-label="检验图表"></div>
       <div id="chart-explainer" class="chart-explainer"></div>
     </section>
+    <div id="grid-station-view" class="stations-view" hidden></div>
     <section class="table-card"><div class="table-heading"><div><h2>评分明细</h2><p id="table-note"></p></div><button id="export-csv" class="quiet">导出 CSV ↓</button></div><div class="table-scroll"><table id="results-table"></table></div></section>
     <footer><span id="updated"></span></footer>
     </div>
   </main>
-</div><script src="./core.js?v=lead-groups-20261012"></script><script src="./demo-models.js?v=model-systems-20261015"></script><script src="./app.js?v=openmeteo-20261015"></script><script src="./case_cache.js?v=auto-case-v11"></script><script src="./case.js?v=auto-case-v11-palette"></script><script src="./typhoon.js?v=names-20261009"></script><script src="./monthly.js?v=ensemble-average-20261011"></script><script src="./model-interfaces.js?v=20261013"></script><script src="./quality.js?v=20261013"></script><script src="./modules.js?v=model-interfaces-20261013"></script>
+</div><script src="./core.js?v=no-gdas-20261019"></script><script src="./demo-models.js?v=model-systems-20261015"></script><script src="./app.js?v=detail-leads-20261027"></script><script src="./case_cache.js?v=auto-case-v11"></script><script src="./case.js?v=auto-case-v11-palette"></script><script src="./typhoon.js?v=names-20261009"></script><script src="./monthly.js?v=ensemble-average-20261011"></script><script src="./model-interfaces.js?v=20261013"></script><script src="./quality.js?v=20261013"></script><script src="./stations.js?v=gap12-20261027"></script><script src="./modules.js?v=grid-unify-20261026"></script><script src="./grid-stations.js?v=detail-leads-20261027"></script>
 </body></html>
