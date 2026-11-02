@@ -1,0 +1,54 @@
+.stations-view{--station-card:#fff;--station-water:#f1f7fa;--station-coast:#9aafb9;--station-grid:#dce5ec;padding-bottom:18px}
+.stations-filters{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end}
+.stations-filters>label{min-width:130px;flex:1;max-width:300px}
+.stations-panels{display:grid;grid-template-columns:minmax(330px,.9fr) minmax(390px,1.1fr);gap:14px;margin:14px 0}
+.stations-view .results,.stations-view .table-card,.stations-view .filter-card{background:var(--station-card)}
+.stations-view .result-heading{align-items:center;flex-wrap:wrap;gap:12px}
+.stations-view h2{margin:0;font-size:17px}
+.stations-view svg{display:block;width:100%;height:auto;color:var(--ink);font-size:12px}
+.stations-view svg text{fill:currentColor;font-family:var(--font)}
+.stations-water{fill:var(--station-water)}
+.stations-grid{fill:none;stroke:var(--station-grid);stroke-width:1}
+.stations-coast{fill:none;stroke:var(--station-coast);stroke-width:1.3}
+.stations-border{fill:none;stroke:var(--station-coast);stroke-width:1.3}
+.stations-province{fill:none;stroke:var(--station-coast);stroke-width:1;stroke-dasharray:4 3}
+.stations-boundary-key{display:inline-flex;align-items:center;gap:5px}
+.stations-boundary-key i{display:inline-block;width:20px;border-top:1.3px solid var(--station-coast)}
+.stations-boundary-key .stations-province-key{border-top-style:dashed}
+.stations-point{cursor:pointer;stroke:var(--station-card);stroke-width:1}
+.stations-point:hover,.stations-point:focus-visible,.stations-point.selected{stroke:var(--ink);stroke-width:2;outline:none}
+.stations-map-key{padding:0 18px 15px;display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.stations-color-scale{display:inline-block;width:90px;height:8px;background:linear-gradient(90deg,hsl(210 64% 47%),hsl(195 64% 47%),hsl(180 64% 47%),hsl(165 64% 47%),hsl(150 64% 47%),hsl(135 64% 47%),hsl(120 64% 47%),hsl(105 64% 47%),hsl(90 64% 47%),hsl(75 64% 47%),hsl(60 64% 47%),hsl(45 64% 47%),hsl(30 64% 47%),hsl(15 64% 47%));border-radius:3px}
+.stations-note{font-size:13px;color:var(--muted);padding:0 18px;line-height:1.7}
+.stations-empty{padding:35px 20px;text-align:center;color:var(--muted)}
+.stations-score-table{max-height:370px}
+.stations-score-table small{color:var(--muted)}
+#stations-detail{margin-top:14px}
+#stations-detail>.stations-filters{padding:0 18px 10px}
+#stations-detail-body>svg{max-height:390px}
+.stations-stats{display:flex;flex-wrap:wrap;gap:15px 28px;padding:5px 18px 16px}
+.stations-stats>span{color:var(--muted);font-size:12px}
+.stations-stats strong{display:block;color:var(--ink);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+@media(max-width:1100px){.stations-panels{grid-template-columns:1fr}.stations-map-card svg{max-height:530px}}
+@media(prefers-color-scheme:dark){
+ .stations-view{--station-card:#172b38;--station-water:#102431;--station-coast:#7d99a9;--station-grid:#304b5c;--ink:#dce9ef;--muted:#a0b7c5;--line:#355061;color:var(--ink);background:#10212e;padding:16px;border-radius:8px}
+ .stations-view select,.stations-view .model-chip{background:#203b4e;color:var(--ink);border-color:var(--line)}
+ .stations-view .notice{background:#203b4e;color:var(--ink);border-color:var(--line)}
+ .stations-view table,.stations-view th,.stations-view td{background:var(--station-card);color:var(--ink);border-color:var(--line)}
+ .stations-view .filter-note{color:var(--muted)}
+ .stations-view .model-chip[aria-pressed=true]{background:#135960;color:#d3f5f2;border-color:#4b9d9a}
+}
+.stations-days .choice-buttons button:disabled{opacity:.45;cursor:not-allowed}
+.grid-source-bar{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+.grid-source-bar[hidden]{display:none}
+.grid-source-bar>span{font-size:13px;color:#5f7685;font-weight:500}
+#grid-station-view{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr);gap:14px;align-items:start;margin-top:14px}
+#grid-station-view[hidden]{display:none}
+#grid-station-view>.results{min-width:0}
+.grid-station-detail{margin-top:0}
+#grid-station-caption{overflow-wrap:anywhere}
+#grid-station-detail-body>svg{max-height:390px}
+#grid-station-map svg{max-height:580px}
+@media(max-width:1100px){#grid-station-view{grid-template-columns:minmax(0,1fr)}}
+.legend .legend-toggle{display:inline-flex;align-items:center;border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer}
+.legend .legend-toggle[aria-pressed="false"]{opacity:.45;text-decoration:line-through}

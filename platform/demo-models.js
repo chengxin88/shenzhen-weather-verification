@@ -34,6 +34,7 @@ window.DemoModels=(()=>{
  async function openModule(module){
   currentModule=module;
   if(module==='quality'){by('module-demo-mode').hidden=true;window.DataQuality.open();return;}
+  if(module==='stations'){by('module-demo-mode').hidden=true;window.StationVerification.open();return;}
   await ready();if(currentModule!==module)return;
   toolbar(module);
   if(module==='case'){if(caseDemo)renderCase();else window.NativeCase.open();}

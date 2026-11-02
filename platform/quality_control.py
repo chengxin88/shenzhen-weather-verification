@@ -524,6 +524,7 @@ def wn3_source(weather, now, rules, deadline):
     s=source('weathernext3',WN3); root=weather/'region-v4/weathernext3'
     known={'native-score-v1':([108.,18.,120.,27.],'weathernext3-native-score-v1'),
            'native-southern-china-v1':([100.,10.,130.,35.],'weathernext3-native-southern-china-v1'),
+           'native-southern-china-v2':([95.,10.,130.,35.],'weathernext3-native-southern-china-v2'),
            'native-china-v1':([60.,0.,150.,60.],'weathernext3-native-china-v1')}
     try:
         # catalog may lag a preparing run; probe 24 exact hourly manifests only.

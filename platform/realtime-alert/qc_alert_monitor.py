@@ -46,6 +46,13 @@ KEEP_DAYS = 8
 ALERT_SEVERITIES = ('error', 'warning')
 # 近 7 天补下载队列属于历史资料，按用户要求不实时推送，仅在晚间汇总中说明。
 EXCLUDED_CODES = {'backfill_short_backlog'}
+# 到报延迟单独成段推送；同一份起报每再晚 6 小时重新提醒一次，避免延迟加重被去重吞掉。
+DELAY_CODES = ('old_run', 'missing_leads', 'observation_gaps')
+DELAY_BUCKET_HOURS = 6
+ARRIVAL_KEYS = ('status', 'label', 'latest_run_utc', 'latest_run_bjt', 'available_frames',
+                'expected_frames', 'missing_leads', 'age_hours', 'warning_age_hours',
+                'forecast_horizon_hours', 'delay_hours', 'hours_behind', 'late_hours',
+                'old_run_hours')
 JSON_LIMIT = 4_000_000
 ID_RE = re.compile(r'^[0-9a-f]{16}$')
 GUARD = ['/usr/bin/timeout', '8', '/usr/bin/python3', '/usr/local/libexec/weather-storage-guard.py', '--ready']
@@ -348,9 +355,53 @@ def run_scan():
 
 # ---------------------------------------------------------------- 报告处理
 
+def delay_bucket(hours):
+    if not isinstance(hours, (int, float)) or isinstance(hours, bool) or hours < 0:
+        return None
+    return int(float(hours) // DELAY_BUCKET_HOURS)
+
+
 def fingerprint(source_id, issue):
-    key = '|'.join(str(issue.get(k)) for k in ('code', 'run_utc', 'lead_hours', 'field'))
+    fields = [issue.get(k) for k in ('code', 'run_utc', 'lead_hours', 'field')]
+    if issue.get('code') in DELAY_CODES:
+        bucket = delay_bucket(issue.get('delay_hours'))
+        if bucket is None:
+            bucket = delay_bucket(issue.get('age_hours'))
+        fields.append(f'delay{bucket if bucket is not None else "-"}')
+    key = '|'.join(str(x) for x in fields)
     return hashlib.sha1(f'{source_id}|{key}'.encode()).hexdigest()[:16]
+
+
+def delay_hours_for(source, issue):
+    arrival = source.get('arrival') if isinstance(source.get('arrival'), dict) else {}
+    for holder in (issue, arrival):
+        for key in ('delay_hours', 'hours_behind', 'late_hours', 'old_run_hours'):
+            value = holder.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+                return round(float(value), 1)
+    return None
+
+
+def age_hours_for(source, issue, now):
+    """优先用报告自己算的起报年龄，缺失时才按生成时间估算。"""
+    arrival = source.get('arrival') if isinstance(source.get('arrival'), dict) else {}
+    value = arrival.get('age_hours')
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+        return round(float(value), 1)
+    stamp = issue.get('run_utc') or issue.get('run_bjt')
+    started = parse(stamp)
+    if started is None:
+        return None
+    age = (now - started).total_seconds() / 3600
+    return round(age, 1) if age >= 0 else None
+
+
+def arrival_for(source):
+    arrival = source.get('arrival')
+    if not isinstance(arrival, dict):
+        return None
+    out = {k: arrival.get(k) for k in ARRIVAL_KEYS if arrival.get(k) is not None}
+    return out or None
 
 
 def metric_for(source, issue):
@@ -365,16 +416,22 @@ def metric_for(source, issue):
     return None
 
 
-def alert_items(snap):
+def alert_items(snap, now=None):
+    now = now or now_utc()
     items = []
     for s in snap.get('sources') or []:
         for i in s.get('issues') or []:
             if i.get('severity') not in ALERT_SEVERITIES or i.get('code') in EXCLUDED_CODES:
                 continue
-            items.append({'fp': fingerprint(s.get('id'), i), 'source_id': s.get('id'), 'source': s.get('name'),
+            delayed = i.get('code') in DELAY_CODES
+            items.append({'fp': '', 'source_id': s.get('id'), 'source': s.get('name'),
                           'severity': i.get('severity'), 'code': i.get('code'), 'message': i.get('message'),
                           'run_utc': i.get('run_utc'), 'run_bjt': i.get('run_bjt'),
-                          'lead_hours': i.get('lead_hours'), 'field': i.get('field'), 'metric': metric_for(s, i)})
+                          'lead_hours': i.get('lead_hours'), 'field': i.get('field'), 'metric': metric_for(s, i),
+                          'arrival': arrival_for(s) if delayed else None,
+                          'delay_hours': delay_hours_for(s, i) if delayed else None,
+                          'age_hours': age_hours_for(s, i, now) if delayed else None})
+            items[-1]['fp'] = fingerprint(s.get('id'), items[-1])
     return items
 
 
@@ -416,7 +473,7 @@ def process_snapshot(st, now, ours=None):
         return None
     normalized, _ = normalize_state(st)
     unique = {}
-    for item in alert_items(snap):
+    for item in alert_items(snap, now):
         previous = unique.get(item['fp'])
         if previous is None or item['severity'] == 'error':
             unique[item['fp']] = item

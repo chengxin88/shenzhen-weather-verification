@@ -1,14 +1,21 @@
 'use strict';
 const $=id=>document.getElementById(id), C=VerificationCore;
 const WN3='Google WeatherNext 3（集合均值）';
-const palette={'ECMWF-IFS-9km-OpenMeteo':'#117f8b','ECMWF-IFS':'#0072b2','ECAI':'#009e73','ECMWF-ENSEMBLES平均':'#56b4e9','NCEP-GFS':'#d55e00','GFSAI':'#cc79a7','Google WeatherNext 2':'#e69f00','Google WeatherNext 3（集合均值）':'#8b5cf6'};
-const names={'ECMWF-IFS-9km-OpenMeteo':'EC 9 km · Open-Meteo','ECMWF-IFS':'EC','ECAI':'ECAI','ECMWF-ENSEMBLES平均':'EC 集合平均','NCEP-GFS':'GFS','GFSAI':'GFSAI','GEFS集合平均':'GFS 集合平均','Google WeatherNext 2':'WN2 集合平均','Google WeatherNext 3（集合均值）':'WN3 集合平均'};
+const palette={'ECMWF-IFS-9km-OpenMeteo':'#117f8b','ECMWF-IFS':'#0072b2','ECAI':'#009e73','ECMWF-ENSEMBLES平均':'#56b4e9','NCEP-GFS':'#d55e00','GFSAI':'#cc79a7','GEFS集合平均':'#8a5a2b','Google WeatherNext 2':'#e69f00','Google WeatherNext 3（集合均值）':'#8b5cf6'};
+const names={'ECMWF-IFS-9km-OpenMeteo':'EC 9 km','ECMWF-IFS':'EC','ECAI':'ECAI','ECMWF-ENSEMBLES平均':'EC 集合平均','NCEP-GFS':'GFS','GFSAI':'GFSAI','GEFS集合平均':'GFS 集合平均','Google WeatherNext 2':'WN2 集合平均','Google WeatherNext 3（集合均值）':'WN3 集合平均'};
 const ids={'ECMWF-IFS':'IFS','ECAI':'AIFS','ECMWF-ENSEMBLES平均':'ENS','GFSAI':'AIGFS','GEFS集合平均':'GEFS'};
 const label=m=>window.DemoModels.profile(m)?window.DemoModels.label(m):names[m]?(ids[m]?`${names[m]}（${ids[m]}）`:names[m]):m;
 const displayModel=m=>label(m);
+const aiModels=new Set(['ECAI','GFSAI','Google WeatherNext 2','Google WeatherNext 3（集合均值）','wn3-demo:pangu-short-range','wn3-demo:zhiji']);
+const modelRank=['ECMWF-IFS','ECMWF-IFS-9km-OpenMeteo','ECMWF-ENSEMBLES平均','NCEP-GFS','GEFS集合平均','ECAI','GFSAI','Google WeatherNext 2','Google WeatherNext 3（集合均值）'];
+const numericFirst=models=>models.map((m,i)=>[m,i,modelRank.includes(m)?modelRank.indexOf(m):99]).sort((a,b)=>aiModels.has(a[0])-aiModels.has(b[0])||a[2]-b[2]||a[1]-b[1]).map(x=>x[0]);
 const displayText=text=>String(text??'').replaceAll('集合均值','集合平均');
 const metricNames={TS:'TS · 综合评分',ETS:'ETS · 公平技巧评分',POD:'POD · 命中率',FAR:'FAR · 空报率',MR:'MR · 漏报率',BIAS:'BIAS · 频率偏差',ME:'ME · 平均误差',MAE:'MAE · 平均绝对误差',RMSE:'RMSE · 均方根误差',CC:'CC · 相关系数',VRMSE:'风矢量 RMSE'};
 const metricHelp={TS:'越接近 1 越好；综合考虑命中、漏报和空报。',ETS:'扣除随机命中的影响，越接近 1 越好；需要完整样本总数。',POD:'越接近 1 越好；应结合空报率一起判断。',FAR:'越接近 0 越好；分母为所有预报事件。',MR:'越接近 0 越好；MR = 1 − POD。',BIAS:'越接近 1 越好；大于 1 表示事件预报偏多，小于 1 表示偏少。',ME:'越接近 0 越好；正值表示预报偏高。',MAE:'越接近 0 越好。',RMSE:'越接近 0 越好，对较大的误差更敏感。',CC:'越接近 1 表示空间分布越一致；不代表量值没有偏差。',VRMSE:'越接近 0 越好，合并考察东西、南北风分量误差。'};
+let gridReference=/(^|&)ref=station(&|$)/.test(location.hash.slice(1))||(!location.hash.includes('ref=')&&localStorage.getItem('gridReference')==='station')?'station':'grid';
+const stationDataset=()=>ds?.source==='station';
+const referenceMatches=d=>!['降水','气温'].includes(d.kind)||(d.source==='station')===(gridReference==='station');
+let stationLoading=null,referenceSequence=0;
 let catalog=null, ds=null, kind='降水', view='multi', scoreScope='period', leadMode='single', leadGroup='near', selected=new Set(), tableRows=[], tableColumns=[], timeCommon=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(v,d=3)=>Number.isFinite(v)?v.toLocaleString('zh-CN',{maximumFractionDigits:d,minimumFractionDigits:d}):'—';
@@ -18,32 +25,48 @@ const unique=x=>[...new Set(x)];
 const unit=()=>$('metric').value==='CC'?'':kind==='气温'?'℃':kind==='地面'?ds.unit:kind==='环流'?($('metric').value==='VRMSE'?'m/s':'m'):'';
 function options(el,items,value){el.replaceChildren(...items.map(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;return o;}));if(items.some(x=>String(x[0])===String(value)))el.value=value;}
 function labelFor(d){return d.kind==='降水'?`${d.accumulation}小时累计降水`:d.kind==='地面'?d.label:d.kind==='环流'?`${d.level} hPa · ${circulationField==='wind'?'风场':'高度场'}`:'2米气温';}
-const sourceName=(d,model)=>model==='ECMWF-IFS-9km-OpenMeteo'?`EC 9 km · Open-Meteo · ${d?.reference||'本地固定起报归档'}`:window.DemoModels.profile(model)?`WN3演示 · ${d?.reference||'实况配对'} · 不计入正式排名`:(d?.source==='analysis'||d?.original_source==='analysis')?`本机预报 · ${d.reference}`:d?.pilot?'WN3 集合平均 · 预计算':d?.source==='comparison'?'全部模式 · 同图对比':d?.source==='hk'?(model===WN3?'WN3 集合平均 · 本机0.1°':model?'EC / GFS · 本地0.25°归档':(d.supported_models||d.models).includes(WN3)?'本地预报缓存 · EC / GFS / WN3':'EC / GFS · 本地0.25°归档'):d?.source==='weekly'?'原 GRIB · 逐时次汇总':'原 GRIB · 多时效归档';
+const sourceName=(d,model)=>d?.source==='station'?'站点实况 · OGIMET SYNOP / NOAA GHCNh / IEM METAR':model==='ECMWF-IFS-9km-OpenMeteo'?`EC 9 km · Open-Meteo · ${d?.reference||'本地固定起报归档'}`:window.DemoModels.profile(model)?`WN3演示 · ${d?.reference||'实况配对'} · 不计入正式排名`:(d?.source==='analysis'||d?.original_source==='analysis')?`本机预报 · ${d.reference}`:d?.source==='comparison'?'全部模式 · 同图对比':d?.source==='hk'?(model===WN3?'WN3 集合平均 · 本机0.1°':model?'EC / GFS · 本地0.25°归档':(d.supported_models||d.models).includes(WN3)?'本地预报缓存 · EC / GFS / WN3':'EC / GFS · 本地0.25°归档'):d?.source==='weekly'?'原 GRIB · 逐时次汇总':'原 GRIB · 多时效归档';
 const elementName=()=>kind==='地面'?(ds?.label||'地面'):kind==='环流'?(circulationField==='wind'?'风场':'高度场'):kind;
-const exportElement=()=>kind==='环流'?`${elementName()}_${ds.level}hPa`:kind==='地面'?elementName():kind;
+const exportElement=()=>(stationDataset()?'站点实况_':'')+exportElementBase();
+const exportElementBase=()=>kind==='环流'?`${elementName()}_${ds.level}hPa`:kind==='地面'?elementName():kind;
+const defaultModels=d=>{const real=d.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m)),stationPair=real.filter(m=>['ECMWF-IFS-9km-OpenMeteo','ECMWF-IFS'].includes(m));return d.source==='station'&&stationPair.length?stationPair:real;};
 const metricsForView=()=>kind==='降水'?['TS',...((ds.source==='weekly'||ds.has_n)?['ETS']:[]),'POD','FAR','MR','BIAS']:kind==='环流'?C.circulationMetrics(circulationField):kind==='地面'&&ds.element.startsWith('wind')?['VRMSE']:['RMSE','ME','MAE','CC'];
 const metricLabel=m=>m==='CC'&&(periodSummary()||groupSummary())?'CC · 平均空间相关':kind==='地面'?(m==='VRMSE'?'VRMSE · 风矢量均方根误差':metricNames[m]+(m==='CC'?'':' · hPa')):kind==='环流'?({RMSE:'RMSE · 高度均方根误差',ME:'ME · 高度平均误差',MAE:'MAE · 高度平均绝对误差',CC:'CC · 高度空间相关',VRMSE:'VRMSE · 风矢量均方根误差'}[m]||metricNames[m]):metricNames[m];
 const metricColumn=m=>m==='CC'&&(periodSummary()||groupSummary())?'平均空间相关 CC':kind==='地面'?(m==='VRMSE'?'风矢量 RMSE (m/s)':m==='CC'?'CC':`${m} (hPa)`):kind==='环流'?(m==='VRMSE'?'风矢量 RMSE (m/s)':m==='CC'?'高度 CC':`高度 ${m} (m)`):m;
-function setChartTitle(title){if(groupActive()&&!groupSummary())title=selectedGroup().label+' · '+title;if(periodSummary())title='整段时间汇总 · '+title;if(activeModels().some(m=>window.DemoModels.profile(m)))title='含 WN3 演示资料 · '+title;$('chart-title').textContent=kind==='环流'?`${elementName()} · ${ds.level} hPa · ${ds.reference} · ${title}`:kind==='地面'?`${elementName()} · ${ds.reference} · ${title}`:title;}
+function setChartTitle(title){if(groupActive()&&!groupSummary())title=selectedGroup().label+' · '+title;if(periodSummary())title='整段时间汇总 · '+title;if(activeModels().some(m=>window.DemoModels.profile(m)))title='含 WN3 演示资料 · '+title;if(stationDataset())title='站点实况 · '+title;$('chart-title').textContent=kind==='环流'?`${elementName()} · ${ds.level} hPa · ${ds.reference} · ${title}`:kind==='地面'?`${elementName()} · ${ds.reference} · ${title}`:title;}
+const referenceBase=r=>String(r||'').replace(' · 深圳及周边',''),referenceLocal=d=>String(d?.reference||'').includes(' · 深圳及周边');
 function referenceControls(){
   $('reference-filters').hidden=!['环流','地面'].includes(kind);
   if($('reference-filters').hidden)return;
-  const choices=catalog.datasets.filter(d=>d.kind===kind);
-  $('reference-switch').replaceChildren(...unique(choices.map(d=>d.reference)).sort((a,b)=>Number(b.includes('ERA5'))-Number(a.includes('ERA5'))).map(reference=>{
-    const b=document.createElement('button');b.type='button';b.textContent=reference;b.setAttribute('aria-pressed',reference===ds.reference);
+  const choices=catalog.datasets.filter(d=>d.kind===kind),sameElement=d=>d.level===ds.level&&(d.element??null)===(ds.element??null);
+  const jump=target=>{if(!target)return;remember();$('dataset').value=target.id;setDataset();};
+  $('reference-switch').replaceChildren(...unique(choices.map(d=>referenceBase(d.reference))).sort((a,b)=>Number(b.includes('ERA5'))-Number(a.includes('ERA5'))).map(reference=>{
+    const b=document.createElement('button');b.type='button';b.textContent=reference;b.setAttribute('aria-pressed',reference===referenceBase(ds.reference));
     b.onclick=()=>{
-      remember();
-      const target=choices.find(d=>d.reference===reference&&d.level===ds.level&&(d.element??null)===(ds.element??null))||choices.find(d=>d.reference===reference);
-      $('dataset').value=target.id;setDataset();
+      const same=choices.filter(d=>referenceBase(d.reference)===reference);
+      jump(same.find(d=>referenceLocal(d)===referenceLocal(ds)&&sameElement(d))||same.find(sameElement)||same[0]);
     };return b;
   }));
+  let scope=$('reference-scope-field');
+  if(!scope){
+    scope=document.createElement('div');scope.id='reference-scope-field';scope.className='filter-field';
+    scope.innerHTML='<span>检验范围</span><div class="choice-buttons" role="group" aria-label="检验范围"></div>';
+    $('reference-filters').append(scope);
+  }
+  const scoped=choices.filter(d=>referenceBase(d.reference)===referenceBase(ds.reference)&&sameElement(d));
+  scope.hidden=kind!=='地面'||new Set(scoped.map(referenceLocal)).size<2;
+  scope.lastElementChild.replaceChildren(...[false,true].map(local=>{
+    const target=scoped.find(d=>referenceLocal(d)===local);if(!target)return null;
+    const b=document.createElement('button');b.type='button';b.textContent=local?'深圳及周边':'华南及周边';b.title=target.region||'';
+    b.setAttribute('aria-pressed',local===referenceLocal(ds));b.onclick=()=>jump(target);return b;
+  }).filter(Boolean));
 }
 function circulationControls(){
   $('circulation-filters').hidden=kind!=='环流';
   $('page-title').textContent=elementName()+'检验';
   if(kind!=='环流')return;
   for(const button of document.querySelectorAll('[data-circulation-field]'))button.setAttribute('aria-pressed',button.dataset.circulationField===circulationField);
-  const choices=catalog.datasets.filter(d=>d.kind==='环流'&&!d.pilot&&d.reference===ds.reference);
+  const choices=catalog.datasets.filter(d=>d.kind==='环流'&&d.reference===ds.reference);
   const scored=new Set(catalog.rows.filter(r=>C.circulationHasScore(r,circulationField)).map(r=>r.dataset));
   const levels=unique([1000,925,850,700,500,300,200,...choices.map(d=>d.level)]).sort((a,b)=>b-a);
   $('circulation-level-switch').replaceChildren(...levels.map(level=>{
@@ -134,6 +157,23 @@ const groupActive=()=>leadMode==='group'&&view!=='info';
 const groupSummary=()=>groupActive()&&!['lead','matrix'].includes(view)&&!timeLeads();
 const selectedGroup=()=>C.leadGroups.find(g=>g.id===leadGroup)||C.leadGroups[0];
 const leadCaption=()=>groupActive()?selectedGroup().label:$('lead').value!==''?'+'+$('lead').value+'小时':'暂无可用时效';
+let fitNote='';
+function fitGroupModels(){
+  fitNote='';
+  if(!groupActive()||singleMode())return;
+  const rows=leadRows(baseRows(ds.models)),have=new Set(rows.map(r=>r.model));
+  let keep=[...selected].filter(m=>have.has(m));
+  // Models whose forecast cycles never coincide would empty the common sample: drop the one costing least.
+  while(keep.length>1&&!C.commonTimes(rows,keep).length){
+    const best=keep.map(m=>{const rest=keep.filter(x=>x!==m);return [m,C.commonTimes(rows,rest).length];}).sort((a,b)=>b[1]-a[1])[0];
+    keep=keep.filter(m=>m!==best[0]);
+  }
+  if(keep.length&&keep.length<selected.size){
+    const dropped=[...selected].filter(m=>!keep.includes(m));
+    fitNote=`已自动去掉：${dropped.map(label).join('、')}（本组无资料，或与其余模式没有共同时次）。可点模式重新加入。`;
+    selected=new Set(keep);
+  }
+}
 function leadRows(rows){return groupActive()?C.filterLeadGroup(rows,leadGroup):manyLeads()?rows:rows.filter(r=>r.lead===Number($('lead').value));}
 function remember(){
   if(!ds)return;
@@ -151,13 +191,13 @@ function remember(){
 }
 function modelControls(availableRows=null){
   const wn2='Google WeatherNext 2',models=[...(ds.supported_models||ds.models)];
-  const wn2Windows=kind==='降水'&&!ds.pilot?unique(catalog.datasets.filter(d=>d.kind==='降水'&&!d.pilot&&d.models.includes(wn2)).map(d=>d.accumulation)).sort((a,b)=>a-b):[];
+  const wn2Windows=kind==='降水'?unique(catalog.datasets.filter(d=>referenceMatches(d)&&d.kind==='降水'&&d.models.includes(wn2)).map(d=>d.accumulation)).sort((a,b)=>a-b):[];
   if(wn2Windows.length&&!models.includes(wn2))models.push(wn2);
-  $('models').replaceChildren(...models.map(m=>{
+  $('models').replaceChildren(...numericFirst(models).map(m=>{
     const b=document.createElement('button');b.className='model-chip';b.dataset.model=m;b.setAttribute('aria-pressed',selected.has(m));
     const archived=ds.models.includes(m),available=archived&&(availableRows===null||availableRows.some(r=>r.model===m));
     const demo=window.DemoModels.profile(m);
-    const demoAlternative=demo&&!archived&&kind==='降水'?catalog.datasets.find(d=>d.kind===kind&&d.models.includes(WN3)&&!d.pilot):null;
+    const demoAlternative=demo&&!archived&&kind==='降水'?catalog.datasets.find(d=>referenceMatches(d)&&d.kind===kind&&d.models.includes(WN3)):null;
     b.disabled=!archived&&!demoAlternative;
     const issue=!archived?ds.model_issues?.[m]:null;
     const otherWindows=m===wn2&&!archived&&wn2Windows.length&&!wn2Windows.includes(ds.accumulation);
@@ -168,18 +208,35 @@ function modelControls(availableRows=null){
       selected.has(m)?selected.delete(m):selected.add(m);modelControls();render();
     };return b;
   }));
-  const systems=new Map(Object.entries({global:'全球预报系统',...window.DemoModels.groups(),other:'其他预报系统'}).map(([id,title])=>[id,{title,buttons:[]}]));
+  const {nowcasting,short_range,...remainingSystems}=window.DemoModels.groups();
+  const systems=new Map(Object.entries({nowcasting,short_range,global:'中期预报系统',...remainingSystems,other:'其他预报系统'}).map(([id,title])=>[id,{title,buttons:[]}]));
   for(const button of $('models').children){
     const model=button.dataset.model,profile=window.DemoModels.profile(model);
     const system=profile?.group||(Object.hasOwn(names,model)?'global':'other');
     (systems.get(system)||systems.get('other')).buttons.push(button);
   }
-  $('models').replaceChildren(...[...systems].filter(([,system])=>system.buttons.length).map(([id,system])=>{
-    const group=document.createElement('div'),title=document.createElement('h3'),chips=document.createElement('div');
+  const groups=[...systems].filter(([,system])=>system.buttons.length).map(([id,system])=>{
+    const group=document.createElement('div'),title=document.createElement('h3'),all=document.createElement('button'),chips=document.createElement('div');
+    const roster=system.buttons.map(button=>button.dataset.model),archived=roster.filter(m=>ds.models.includes(m));
+    const alternative=!archived.length&&system.buttons.some(button=>!button.disabled&&window.DemoModels.profile(button.dataset.model))
+      ?catalog.datasets.find(d=>referenceMatches(d)&&d.kind===kind&&d.models.includes(WN3)):null;
     group.className='model-system-group';group.setAttribute('role','group');group.setAttribute('aria-labelledby','model-system-'+id);
-    title.id='model-system-'+id;title.textContent=system.title;chips.className='model-chips';chips.append(...system.buttons);
-    group.append(title,chips);return group;
-  }));
+    title.id='model-system-'+id;
+    all.type='button';all.className='model-system-title';all.dataset.system=id;all.textContent=system.title;
+    all.disabled=!archived.length&&!alternative;
+    all.setAttribute('aria-label',system.title);
+    all.setAttribute('aria-pressed',view==='multi'&&archived.length>0&&selected.size===archived.length&&archived.every(m=>selected.has(m)));
+    all.title=all.disabled?system.title+'暂无'+labelFor(ds)+'评分':alternative
+      ?`切换到${alternative.accumulation}小时累计，查看${system.title}的全部可用演示模式`
+      :`仅选择${system.title}的全部 ${archived.length} 个已归档模式，查看多模式对比`;
+    all.onclick=()=>{
+      if(alternative){$('dataset').value=alternative.id;setDataset();}
+      selected=new Set(roster.filter(m=>ds.models.includes(m)));view='multi';render();
+    };
+    title.append(all);chips.className='model-chips';chips.append(...system.buttons);
+    group.append(title,chips);return {group};
+  });
+  $('models').replaceChildren(...groups.map(g=>g.group));
   options($('single'),[...selected].map(m=>[m,displayModel(m)]),$('single').value);
 }
 function setKind(value,preferred){
@@ -187,25 +244,25 @@ function setKind(value,preferred){
   $('grid-workspace').dataset.activeKind=kind;
   document.querySelectorAll('[data-kind]').forEach(b=>b.classList.toggle('active',!$('grid-workspace').hidden&&b.dataset.kind===kind));
   $('page-title').textContent=kind+'检验';
-  const choices=catalog.datasets.filter(d=>d.kind===kind).sort((a,b)=>(a.accumulation??0)-(b.accumulation??0)||(a.level??0)-(b.level??0));
-  const wantedReference=['环流','地面'].includes(kind)?(preferences.referenceByKind[kind]||(kind==='环流'?'ERA5 再分析':'GDAS 分析场')):null;
+  const choices=catalog.datasets.filter(d=>d.kind===kind&&referenceMatches(d)).sort((a,b)=>(a.accumulation??0)-(b.accumulation??0)||(a.level??0)-(b.level??0));
+  const wantedReference=['环流','地面'].includes(kind)?(preferences.referenceByKind[kind]||'ERA5 再分析'):null;
   const scoped=choices.some(d=>d.reference===wantedReference)?choices.filter(d=>d.reference===wantedReference):choices;
   const target=scoped.find(d=>matchesPrevious(d,preferred))||(kind==='环流'?(scoped.find(d=>d.level===preferences.circulationLevel)||scoped.find(d=>d.level===500)):null)||scoped[0];
-  options($('dataset'),choices.map(d=>[d.id,labelFor(d)+(d.pilot?" · 早期试接入记录":"")]),target?.id);setDataset();
+  options($('dataset'),choices.map(d=>[d.id,labelFor(d)]),target?.id);setDataset();
 }
 function datasetControls(){
   let field=$('dataset-choice-field');
   if(!field){
     field=document.createElement('div');field.id='dataset-choice-field';field.className='filter-field';
-    field.innerHTML='<span>检验资料</span><div class="choice-buttons" role="group" aria-label="检验资料"></div>';
+    field.innerHTML='<span>检验要素</span><div class="choice-buttons" role="group" aria-label="检验要素"></div>';
     $('accumulation-label').parentElement.prepend(field);
   }
-  const choices=catalog.datasets.filter(d=>d.kind===kind&&(kind!=='地面'||d.reference===ds.reference));
-  field.hidden=kind!=='地面'&&!choices.some(d=>d.pilot);
-  field.firstElementChild.textContent=kind==='地面'?'检验要素':'检验资料';
+  const choices=catalog.datasets.filter(d=>kind==='地面'&&d.kind===kind&&d.reference===ds.reference);
+  field.hidden=kind!=='地面';
+  field.firstElementChild.textContent='检验要素';
   field.lastElementChild.replaceChildren(...choices.map(d=>{
     const b=document.createElement('button');b.type='button';
-    b.textContent=kind==='地面'?d.label:d.pilot?'早期试接入记录':'全部模式';
+    b.textContent=d.label;
     b.setAttribute('aria-pressed',d.id===ds.id);
     b.onclick=()=>{$('dataset').value=d.id;setDataset();};return b;
   }));
@@ -218,7 +275,7 @@ function setDataset(){
   scoreScope=saved.scoreScope==='instant'?'instant':'period';
   leadMode=(saved.leadMode??preferences.leadMode)==='group'?'group':'single';
   leadGroup=C.leadGroups.some(g=>g.id===(saved.leadGroup??preferences.leadGroup))?(saved.leadGroup??preferences.leadGroup):'near';
-  const remembered=saved.models||ds.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m));
+  const remembered=saved.models||defaultModels(ds);
   const oldRoster=saved.knownModels||(kind==='环流'&&ds.reference.includes('ERA5')?['ECMWF-IFS','NCEP-GFS']:ds.models);
   const introduced=ds.models.filter(m=>!window.DemoModels.profile(m)&&!oldRoster.includes(m)&&catalog.rows.some(r=>r.dataset===ds.id&&r.model===m&&(leadMode==='group'?C.inLeadGroup(r.lead,leadGroup):r.lead===Number(saved.lead??24))));
   selected=new Set([...remembered,...introduced].filter(m=>ds.models.includes(m)));
@@ -247,16 +304,21 @@ function setDataset(){
 
   $('accumulation-label').hidden=kind!=='降水';
   $('accumulation-switch').hidden=kind!=='降水';
-  $('accumulation-switch').replaceChildren(...unique(catalog.datasets.filter(d=>d.kind==='降水').map(d=>d.accumulation)).sort((a,b)=>a-b).map(hours=>{
+  $('accumulation-switch').replaceChildren(...unique(catalog.datasets.filter(d=>d.kind==='降水'&&referenceMatches(d)).map(d=>d.accumulation)).sort((a,b)=>a-b).map(hours=>{
     const b=document.createElement('button');b.textContent=hours+' 小时累计';b.setAttribute('aria-pressed',hours===ds.accumulation);
-    b.onclick=()=>{const target=catalog.datasets.find(d=>d.kind==='降水'&&d.accumulation===hours&&d.source===ds.source)||catalog.datasets.find(d=>d.kind==='降水'&&d.accumulation===hours);$('dataset').value=target.id;setDataset();};return b;
+    b.onclick=()=>{const target=catalog.datasets.find(d=>d.kind==='降水'&&d.accumulation===hours&&d.source===ds.source)||catalog.datasets.find(d=>d.kind==='降水'&&referenceMatches(d)&&d.accumulation===hours);$('dataset').value=target.id;setDataset();};return b;
   }));
   validOptions();if(saved.valid&&[...$('valid').options].some(o=>o.value===saved.valid))$('valid').value=saved.valid;
-  render();
+  clampStationDates();render();
+}
+function clampStationDates(){
+  if(!stationDataset())return;
+  for(const id of ['start','end']){const el=$(id);el.min=ds.start.slice(0,10);el.max=ds.end.slice(0,10);if(el.value)el.value=el.value<el.min?el.min:el.value>el.max?el.max:el.value;}
 }
 function setDates(days){
-  const {start,end}=days==='all'?{start:ds.start.slice(0,10),end:ds.end.slice(0,10)}:C.calendarWindow(days);
-  $('start').value=start;$('end').value=end;
+  const latest=(stationDataset()||ds.reference?.includes('ERA5'))&&ds.end?ds.end.slice(0,10):null,anchored=latest&&latest<C.calendarWindow(1).end?Date.parse(latest+'T12:00:00+08:00'):Date.now();
+  const {start,end}=days==='all'?{start:ds.start.slice(0,10),end:ds.end.slice(0,10)}:C.calendarWindow(days,anchored);
+  $('start').value=start;$('end').value=end;clampStationDates();
   document.querySelectorAll('[data-days]').forEach(b=>b.classList.toggle('chosen',b.dataset.days===String(days)));
 }
 function dates(days){if(ds){setDates(days);scoreScope='period';render();}}
@@ -299,18 +361,18 @@ function coverageDetails(raw,used){
     const key=JSON.stringify([m,lead,valid]),state=retained.has(key)?'yes':available.has(key)?'excluded':'',cellLabel=state==='yes'?'参与当前结果':state==='excluded'?'有归档，被共同样本筛选排除':'未归档';
     return `<span class="heat-cell ${state}" title="${esc(label(m))} · +${lead}h · ${full(valid)} BJT · ${cellLabel}"></span>`;
   }).join('')).join('')}</div>`:'<p>所选范围没有归档记录。</p>';
-  return `<p>计数单位为“预报时效＋有效时间”，同一组合的多个阈值只计一次。共同样本逐阈值取交集；组合保留任一阈值即计入，具体阈值的时次数见评分明细。${commonOptions().acrossLeads?'各时效进一步使用同一组有效时间。':'各时效分别匹配有效时间。'}这里的并集仅代表现有归档，不是理论应有资料量，也不保证各模式采用完全相同的格点。</p><table><thead><tr><th>模式</th><th>可用组合</th><th>参与组合</th><th>筛选排除</th></tr></thead><tbody>${cov.perModel.map(r=>`<tr><td>${esc(label(r.model))}</td><td>${r.availableCount}</td><td>${included?r.commonCount:r.availableCount}</td><td>${included?r.excludedCount:0}</td></tr>`).join('')}</tbody></table><p class="coverage-legend">青色：参与结果　琥珀色：有归档但被筛除　灰色：未归档；悬停查看时效与时间。</p>${grid}`;
+  return `<p>计数单位为“预报时效＋有效时间”，同一组合的多个阈值只计一次。共同样本逐阈值取交集；组合保留任一阈值即计入，具体阈值的时次数见评分明细。${commonOptions().acrossLeads?'各时效进一步使用同一组有效时间。':'各时效分别匹配有效时间。'}这里的并集仅代表现有归档，不是理论应有资料量，也不保证各模式采用完全相同的${stationDataset()?'站点':'格点'}。</p><table><thead><tr><th>模式</th><th>可用组合</th><th>参与组合</th><th>筛选排除</th></tr></thead><tbody>${cov.perModel.map(r=>`<tr><td>${esc(label(r.model))}</td><td>${r.availableCount}</td><td>${included?r.commonCount:r.availableCount}</td><td>${included?r.excludedCount:0}</td></tr>`).join('')}</tbody></table><p class="coverage-legend">青色：参与结果　琥珀色：有归档但被筛除　灰色：未归档；悬停查看时效与时间。</p>${grid}`;
 }
 function sampleSummary(raw,used){
   const c=C.sampleCoverage(raw,activeModels(),commonOptions()),on=useCommon();
   $('sample-title').textContent=`样本明细 · 可用 ${c.unionCount} 组${on?' · 共同 '+c.commonCount+' 组'+(c.excludedCount?' · 排除 '+c.excludedCount+' 组':''):''}`;
   $('sample-details').innerHTML=coverageDetails(raw,used);
 }
-function svgStart(title,w=1000,h=350){return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}"><title>${esc(title)} · ${esc($('chart-subtitle').textContent)}</title><rect width="100%" height="100%" fill="white"/>`;}
+function svgStart(title,w=1000,h=350){if(stationDataset()&&!title.includes('站点实况'))title='站点实况 · '+title;return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}"><title>${esc(title)} · ${esc($('chart-subtitle').textContent)}</title><rect width="100%" height="100%" fill="white"/>`;}
 function axes(metric,values,w=1000,h=350){const L=70,R=w-35,T=28,B=h-61;let lo=0,hi=1,vals=values.filter(Number.isFinite);if(!['TS','POD','FAR','MR','ETS','CC'].includes(metric)){lo=Math.min(0,...vals);hi=Math.max(metric==='BIAS'?1:0,...vals);const pad=(hi-lo||1)*.12;hi+=pad;if(lo<0)lo-=pad;}else if(['ETS','CC'].includes(metric)){lo=Math.min(0,...vals);if(lo<0)lo=-1;}const y=v=>B-(v-lo)/(hi-lo)*(B-T);let markup='';for(let i=0;i<=5;i++){const v=lo+(hi-lo)*i/5;markup+=`<line class="grid" x1="${L}" x2="${R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-12}" y="${y(v)+4}" text-anchor="end">${fmt(v,Math.abs(hi)>10?1:2)}</text>`;}markup+=`<path class="axis" fill="none" d="M${L} ${T}V${B}H${R}"/><text x="${L}" y="15">${esc(metric)} ${esc(unit())}</text>`;if(metric==='BIAS')markup+=`<line x1="${L}" x2="${R}" y1="${y(1)}" y2="${y(1)}" stroke="#a0bbc7" stroke-dasharray="4 4"/>`;return {L,R,T,B,y,markup};}
 function bars(data,xKey,xlabel){
   if(!data.length)return empty();
-  const m=$('metric').value,models=unique(data.map(r=>r.model)),xs=unique(data.map(r=>r[xKey])).sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b)));
+  const m=$('metric').value,models=numericFirst(unique(data.map(r=>r.model))),xs=xKey==='model'?models:unique(data.map(r=>r[xKey])).sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b)));
   const a=axes(m,data.map(r=>r[m])),group=(a.R-a.L)/xs.length,bw=Math.min(37,group*.75/models.length);
   let s=svgStart($('chart-title').textContent)+a.markup;
   for(let j=0;j<xs.length;j++){
@@ -410,7 +472,7 @@ function matrix(data){
   svg+=`<text x="${left}" y="${bottom+28}">${fmt(lo,2)}</text><text x="${left+240}" y="${bottom+28}" text-anchor="end">${fmt(hi,2)}</text><text x="${left+270}" y="${bottom+10}">颜色越深，数值越大；优劣请按指标解释判断。灰色 — 为无资料或评分无定义。</text>`;
   return svg+'</svg>';
 }
-function info(){return `<div class="info-grid"><div class="info-block"><h3>参考资料与空间范围</h3><p>${esc(ds.reference)}</p><p>${esc(ds.region)}</p><p>${kind==='环流'?`${ds.level} hPa · ${elementName()}；${circulationField==='wind'?'风矢量误差单位 m/s。':'高度误差单位 m，空间相关无量纲。'}`:'格点分析场；配对格点数不等于独立站点数。'}</p><p>${ds.reference.includes('ERA5')?'此处使用 ERA5 再分析；近期 ERA5T 为初步资料，通常延迟约5天。':'此处评分参考：'+esc(ds.reference)+'。'}</p></div><div class="info-block"><h3>时间与样本口径</h3><p>起报时间 + 预报时效 = 预报对应时间（气象上称有效时间）；全部显示北京时间。</p><p>${kind==='降水'?`降水是有效时间之前 ${ds.accumulation} 小时的累计量，按 ≥ 阈值分别评分。`:'整段时间汇总：各时刻同等权重，ME、MAE取平均，RMSE和风矢量RMSE先平均平方再开方；CC显示各时刻空间相关的平均值。单个时刻和时间序列显示原始评分。'}</p><p>时效分组：临近0–24小时，短期超过24到72小时，中期超过72到168小时。24小时和72小时各只计入一组。分组汇总将每个“预报时效＋有效时间”作为一份预报；连续量各份预报等权，降水先合并命中、漏报、空报计数再评分。起报0小时仅在已有可配对资料时参与。</p><p>模式对比逐时效、逐阈值匹配共同时间；分组只汇总筛选后留下的组合。时间序列默认保留各模式已有时次。</p><p>${esc(displayText(ds.source_note||'共同有效时间不等于已验证完全相同的格点。'))}</p></div><div class="info-block"><h3>指标与无定义值</h3>${kind==='降水'?'<p>TS = H/(H+M+F)；POD = H/(H+M)；FAR = F/(H+F)。</p><p>MR = M/(H+M)；BIAS = (H+F)/(H+M)。</p><p>先累加 H/M/F 再计算评分；不平均逐次 TS。</p><p>分母为零显示 —，仍视为已归档记录。缺少总样本 N 时不提供 ETS。</p>':(kind==='环流'&&circulationField==='wind'||kind==='地面'&&ds.element.startsWith('wind'))?'<p>VRMSE = √mean[(u预报−u分析)² + (v预报−v分析)²]。</p><p>合并东西、南北风分量误差，单位 m/s，越接近 0 越好。</p><p>期间汇总先平均各时刻 VRMSE 的平方，再开方；无资料不计零分。</p>':'<p>ME、MAE、RMSE 分别为平均误差、平均绝对误差、均方根误差。</p><p>CC 表示空间相关；期间汇总显示平均空间相关，并非合并全部格点后计算的相关系数。</p><p>无资料不计零分；某指标在参与时刻中存在无定义值时，汇总值显示 —。</p>'}</div><div class="info-block"><h3>资料来源和限制</h3><p>检验归档缓存每 5 分钟更新。</p><p>读取 ${catalog.status.accepted} 份；未识别 ${catalog.status.unverified} 份；失败 ${catalog.status.unreadable} 份。</p><p>归档不足以支持年度报告、台站空间评分或降水过程诊断，当前仅展示可计算的结果。</p><p>展开“样本明细”查看筛选排除原因。</p></div></div>`;}
+function info(){return `<div class="info-grid"><div class="info-block"><h3>参考资料与空间范围</h3><p>${esc(ds.reference)}</p><p>${esc(ds.region)}</p><p>${kind==='环流'?`${ds.level} hPa · ${elementName()}；${circulationField==='wind'?'风矢量误差单位 m/s。':'高度误差单位 m，空间相关无量纲。'}`:stationDataset()?'站点实况；n为该时效/时刻配对站点数；未作海拔订正。':'格点分析场；配对格点数不等于独立站点数。'}</p><p>${ds.reference.includes('ERA5')?'此处使用 ERA5 再分析；近期 ERA5T 为初步资料，通常延迟约5天。':'此处评分参考：'+esc(ds.reference)+'。'}</p></div><div class="info-block"><h3>时间与样本口径</h3><p>起报时间 + 预报时效 = 预报对应时间（气象上称有效时间）；全部显示北京时间。</p><p>${kind==='降水'?`降水是有效时间之前 ${ds.accumulation} 小时的累计量，按 ≥ 阈值分别评分。`:'整段时间汇总：各时刻同等权重，ME、MAE取平均，RMSE和风矢量RMSE先平均平方再开方；CC显示各时刻空间相关的平均值。单个时刻和时间序列显示原始评分。'}</p><p>时效分组：临近0–24小时，短期超过24到72小时，中期超过72到168小时。24小时和72小时各只计入一组。分组汇总将每个“预报时效＋有效时间”作为一份预报；连续量各份预报等权，降水先合并命中、漏报、空报计数再评分。起报0小时仅在已有可配对资料时参与。</p><p>模式对比逐时效、逐阈值匹配共同时间；分组只汇总筛选后留下的组合。时间序列默认保留各模式已有时次。</p><p>${esc(displayText(ds.source_note||'共同有效时间不等于已验证完全相同的格点。'))}</p></div><div class="info-block"><h3>指标与无定义值</h3>${kind==='降水'?'<p>TS = H/(H+M+F)；POD = H/(H+M)；FAR = F/(H+F)。</p><p>MR = M/(H+M)；BIAS = (H+F)/(H+M)。</p><p>先累加 H/M/F 再计算评分；不平均逐次 TS。</p><p>分母为零显示 —，仍视为已归档记录。缺少总样本 N 时不提供 ETS。</p>':(kind==='环流'&&circulationField==='wind'||kind==='地面'&&ds.element.startsWith('wind'))?'<p>VRMSE = √mean[(u预报−u分析)² + (v预报−v分析)²]。</p><p>合并东西、南北风分量误差，单位 m/s，越接近 0 越好。</p><p>期间汇总先平均各时刻 VRMSE 的平方，再开方；无资料不计零分。</p>':`<p>ME、MAE、RMSE 分别为平均误差、平均绝对误差、均方根误差。</p><p>CC 表示空间相关；期间汇总显示平均空间相关，并非合并全部${stationDataset()?'站点配对':'格点'}后计算的相关系数。</p><p>无资料不计零分；某指标在参与时刻中存在无定义值时，汇总值显示 —。</p>`}</div><div class="info-block"><h3>资料来源和限制</h3><p>${stationDataset()?'站点资料由每3小时定时任务离线评分，保留近31天。':'检验归档缓存每 5 分钟更新。'}</p><p>${stationDataset()?'本资料集有 '+ds.row_count+' 条离线评分记录。':'读取 '+catalog.status.accepted+' 份；未识别 '+catalog.status.unverified+' 份；失败 '+catalog.status.unreadable+' 份。'}</p><p>${stationDataset()?'观测来源：OGIMET SYNOP / NOAA GHCNh / IEM METAR。各模式配对站点可能不同；CC在每个时刻按站点空间分布计算，少于3站或零方差时无定义。':'归档不足以支持年度报告、台站空间评分或降水过程诊断，当前仅展示可计算的结果。'}</p><p>展开“样本明细”查看筛选排除原因。</p></div></div>`;}
 function renderTable(rows){const metrics=metricsForView();tableColumns=[['model','模式'],...(['time','info'].includes(view)?[['valid','有效时间 BJT']]:[]),...(groupSummary()?[['lead_group_label','时效分组'],['lead_hours','参与时效 h'],['forecast_count','时效 / 时刻组合']]:[['lead','时效 h']]),...(kind==='降水'?[['threshold','阈值 ≥ mm']]:[]),...metrics.map(m=>[m,metricColumn(m)]),['cycles','有效时次'],['n','配对样本 N'],...(kind==='降水'?[['H','命中 H'],['M','漏报 M'],['F','空报 F']]:[])];
   tableRows=rows.map(r=>({...r,element:elementName(),reference:ds.reference,accumulation:ds.accumulation,level:ds.level,height_m:ds.height_m,region:ds.region,period_start:$('start').value,period_end:$('end').value,run_hour:$('hour').value, score_scope:periodSummary()?'整段时间汇总':instantSelection()?'单个时刻':kind==='降水'?'期间累计计数':'逐时刻评分',lead_selection:groupActive()?'分组检验':manyLeads()?'逐时效检验':'单个时效',lead_group_bounds:groupActive()?(selectedGroup().includeMin?'0≤时效≤24':selectedGroup().min+'<时效≤'+selectedGroup().max):'',aggregation_rule:kind==='降水'?'累计H/M/F后评分':groupSummary()?'各时效/时刻组合等权；RMSE先平均平方再开方；CC为平均空间相关':periodSummary()?'各时刻等权；RMSE先平均平方再开方；CC为平均空间相关':'单次原始评分',fixed_valid:instantSelection()?$('valid').value:'', valid_times:r.valid_times||r.valid, sample_rule:useCommon()?(commonOptions().acrossLeads?'模式和所有时效共同有效时间（逐阈值）':'逐时效、逐阈值共同有效时间'):'各自有效时次'}));
   const metric=$('metric').value;$('results-table').innerHTML='<thead><tr>'+tableColumns.map(c=>`<th scope="col">${esc(c[1])}</th>`).join('')+'</tr></thead><tbody>'+tableRows.slice(0,600).map(r=>'<tr>'+tableColumns.map(([key])=>`<td${key===metric?' class="metric-cell"':''}>${metrics.includes(key)?fmt(r[key]):key==='valid'?esc(full(r[key])):r[key]==null?'—':typeof r[key]==='number'?fmt(r[key],key==='threshold'?1:0):esc(key==='model'?label(r[key]):key==='lead_hours'?r[key].split(';').join('、'):r[key])}</td>`).join('')+'</tr>').join('')+'</tbody>';
@@ -420,7 +482,7 @@ function renderTable(rows){const metrics=metricsForView();tableColumns=[['model'
 function wn3CoverageNote(availableRows){
   let note=$('wn3-source-note');
   if(!note){note=document.createElement('p');note.id='wn3-source-note';note.className='filter-note current-source';$('filter-note').after(note);}
-  note.hidden=['地面','环流'].includes(kind)||Boolean(ds.pilot)||!(ds.supported_models||ds.models).includes(WN3);
+  note.hidden=['地面','环流'].includes(kind)||!(ds.supported_models||ds.models).includes(WN3);
   if(note.hidden)return;
   const rows=availableRows.filter(r=>r.model===WN3),count=new Set(rows.map(r=>JSON.stringify([r.lead,r.valid]))).size;
   const provenance=displayText(ds.model_sources?.[WN3]?.note||'WN3 使用本机缓存的 0.1° 集合平均；仅接入标准 2 米气温和完整小时段组成的 3 小时降水。');
@@ -450,7 +512,7 @@ function leadControls(){
     const b=document.createElement('button');b.type='button';b.dataset.leadGroup=g.id;
     b.textContent=g.label+(C.filterLeadGroup(raw,g.id).length?'':' · 暂无评分');
     b.setAttribute('aria-pressed',g.id===leadGroup);
-    b.onclick=()=>{leadGroup=g.id;scoreScope='period';render();};return b;
+    b.onclick=()=>{leadGroup=g.id;scoreScope='period';fitGroupModels();render();};return b;
   }));
   const select=$('lead'),items=[...select.options],dense=items.length>12;
   select.hidden=!dense;
@@ -461,23 +523,22 @@ function leadControls(){
     b.onclick=()=>{select.value=o.value;render();};return b;
   }));
 }
-function leadGroupCoverage(available,used){
-  const box=$('lead-group-summary');box.hidden=!groupActive();if(box.hidden)return;
-  const g=selectedGroup(),show=rows=>C.forecastCoverage(rows).lead_hours.split(';').filter(Boolean).map(h=>'+'+h+'小时').join('、')||'无';
-  const a=C.forecastCoverage(available),u=C.forecastCoverage(used),omitted=a.forecast_count-u.forecast_count;
-  const method=groupSummary()?(kind==='降水'?'累计组内H/M/F后评分。':'每个时效与时刻组合等权汇总。'):'当前视图逐时效展示组内评分。';
-  box.innerHTML=`<strong>${esc(g.label)}</strong>：${g.includeMin?'包含0和24小时':'超过'+g.min+'小时，至'+g.max+'小时（含）'}。${esc(method)}<div class="group-coverage-line">所选模式可用时效：${show(available)}；实际参与：${show(used)}，共 ${u.forecast_count} 个时效 / 时刻组合。${omitted>0?'共同样本筛选排除 '+omitted+' 组。':''}</div><div class="group-coverage-line">仅统计已有且满足筛选条件的评分，不代表组内每小时都有资料；缺资料不计零分。${!used.length?'可调整日期、模式或共同样本筛选。':''}</div>`;
+function leadGroupCoverage(){
+  const box=$('lead-group-summary');box.replaceChildren();box.hidden=true;
+  if(!groupActive())return;
+  if(fitNote){const note=document.createElement('span');note.id='lead-fit-note';note.textContent=fitNote;box.append(note);box.hidden=false;}
   let eligible=leadRows(baseRows(ds.models));if(instantSelection())eligible=eligible.filter(r=>r.valid===$('valid').value);
   const availableModels=unique(eligible.map(r=>r.model));
   if(!singleMode()&&availableModels.length&&activeModels().some(m=>!availableModels.includes(m))){
     const button=document.createElement('button');button.type='button';button.className='quiet';button.id='lead-models-available';
     button.textContent='只比较本组有资料的模式';
-    button.onclick=()=>{selected=new Set(availableModels);render();};box.append(button);
+    button.onclick=()=>{selected=new Set(availableModels);render();};box.append(button);box.hidden=false;
   }
 }
 
 function render(){
   if(!ds)return;
+  clampStationDates();
   let availableRows=baseRows(ds.models);
   availableRows=leadRows(availableRows);
   modelControls(availableRows);
@@ -501,7 +562,7 @@ function render(){
   $('scope-hint').textContent=groupActive()?(manyLeads()?'展示所选组内各时效':'汇总所选组内时效'):allThresholds?'当前视图展示全部降水阈值':manyLeads()?'当前视图展示全部已归档时效':'';
   $('export-svg').hidden=view==='info';
   const metric=$('metric').value,lead=Number($('lead').value),threshold=Number($('threshold').value),source=scopeRows(rain||Boolean($('valid').value)),raw=currentRows();
-  stats(raw);sampleSummary(source,raw);periodCoverage(raw);leadGroupCoverage(source,raw);
+  stats(raw);sampleSummary(source,raw);periodCoverage(raw);leadGroupCoverage();
   if(view==='time'){
     const available=unique(source.map(r=>r.valid)).length,retained=unique(raw.map(r=>r.valid)).length;
     $('time-sample-note').textContent=useCommon()&&retained<available?`共同时次保留 ${retained} / ${available} 个` : '';
@@ -513,11 +574,11 @@ function render(){
   $('model-status').textContent=missing.length?missing.map(displayModel).join('、')+' 暂无'+labelFor(ds)+'评分。':'';
   const statusRow=$('model-status-row');if(statusRow)statusRow.hidden=!missing.length;
   $('active-filter-summary').textContent=($('hour').value==='all'?'全部起报时次':$('hour').value+'时起报')+' · '+(useCommon()?(commonOptions().acrossLeads?'跨时效共同时间':'共同有效时次'):view==='time'?'全部已有时次':'各自有效时次');
-  $('filter-note').textContent=`${labelFor(ds)} · ${$('start').value} — ${$('end').value} BJT · ${ds.region}${ds.pilot?' · 单时次接入验证，不用于模式排名。':''}`;
-  $('chart-subtitle').textContent=`${ds.region} · ${labelFor(ds)} · ${$('start').value} — ${$('end').value} · ${useCommon()?(commonOptions().acrossLeads?'模式与时效共同时间':'逐时效共同时间'):view==='time'?'各模式已有时次':'各自可用时间'}${instantSelection()?' · 仅看 '+full($('valid').value)+' 北京时间':periodSummary()?' · 整段时间汇总':''}`;
+  $('filter-note').textContent=`${stationDataset()?'站点实况 · ':''}${labelFor(ds)} · ${$('start').value} — ${$('end').value} BJT · ${ds.region}`;
+  $('chart-subtitle').textContent=`${stationDataset()?'站点实况 · ':''}${ds.region} · ${labelFor(ds)} · ${$('start').value} — ${$('end').value} · ${useCommon()?(commonOptions().acrossLeads?'模式与时效共同时间':'逐时效共同时间'):view==='time'?'各模式已有时次':'各自可用时间'}${instantSelection()?' · 仅看 '+full($('valid').value)+' 北京时间':periodSummary()?' · 整段时间汇总':''}`;
   let data=[],chart='',title='';
   if(['multi','single'].includes(view)){
-    title=(ds.pilot?'WN3 集合平均 · 早期试接入记录':view==='single'?displayModel($('single').value)+' · 单模式检验':'多模式'+(rain?'降水阈值':'评分')+'对比')+' · '+leadCaption();
+    title=(view==='single'?displayModel($('single').value)+' · 单模式检验':'多模式'+(rain?'降水阈值':'评分')+'对比')+' · '+leadCaption();
     data=resultGroups(raw,rain?['model','lead','threshold']:['model','lead']);setChartTitle(title);
     chart=bars(data,rain?'threshold':'model',rain?`${ds.accumulation}小时累计降水阈值 ≥（mm）`:'模式');
   }else if(view==='matrix'){
@@ -534,7 +595,7 @@ function render(){
   }else{
     title='资料覆盖与检验口径';data=resultGroups(raw,['model','lead','valid',...(rain?['threshold']:[])]);setChartTitle(title);chart=info();
   }
-  const modelList=timeLeads()?unique(data.map(r=>r.lead)).sort((a,b)=>a-b).map(l=>'+'+l+'h'):activeModels();
+  const modelList=timeLeads()?unique(data.map(r=>r.lead)).sort((a,b)=>a-b).map(l=>'+'+l+'h'):numericFirst(activeModels());
   $('legend').innerHTML=view==='info'?'':modelList.map(m=>`<span><i style="background:${color(m)}"></i>${esc(label(m))}</span>`).join('');
   if(!raw.length&&view!=='info'&&activeModels().length){
     const candidates=scopeRows(false),missing=activeModels().filter(m=>!candidates.some(r=>r.model===m));
@@ -550,12 +611,13 @@ function render(){
   $('chart-explainer').textContent=view==='performance'?'综合图同时显示 POD、1−FAR、TS 和 BIAS；点击或悬停查看数值。':view==='info'?'样本不足与无事件不等于零分；不依据不完整资料自动排名。':`${metricHelp[metric]} ${unit()?'单位：'+unit()+'。':''} ${groupSummary()?(rain?'合并组内命中、漏报、空报计数后计算评分。':'每个“时效＋时刻”组合等权；RMSE先平均平方再开方，CC为平均空间相关。'):periodSummary()?'汇总所选日期内已有时刻；各时刻同等权重。'+(metric==='CC'?'此处为平均空间相关。':''):view==='time'?(useCommon()?'仅显示共同时次；缺测处断线。':'各模式保留已有时次；缺测处断线。')+'点击或悬停查看每次评分。':rain?'先汇总命中、漏报和空报计数，再评分；点击或悬停查看数值。':''}`;
   $('export-svg').disabled=!$('chart').querySelector('svg');renderTable(data);
   $('updated').textContent='结果更新 '+full(ds.updated)+' BJT';remember();
+  document.dispatchEvent(new CustomEvent('gridselectionchange',{detail:stationSelection()}));
 }
 function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);}
 $('export-csv').onclick=()=>{const cols=[...tableColumns,['is_demo','是否演示'],['source_model','演示真实来源'],['target_product_id','演示目标接口'],['excluded_from_official_scores','排除正式排名'],['element','检验要素'],['source_label','资料溯源渠道'],['source_datasets','原始归档ID'],['reference','参考资料'],['region','检验区域'],['accumulation','累计小时'],['level','气压 hPa'],['height_m','离地高度 m'],['period_start','开始有效日期'],['period_end','结束有效日期'],['sample_rule','样本规则'],['run_hour','起报时次BJT'],['score_scope','查看方式'],['aggregation_rule','汇总方法'],['fixed_valid','预报对应时间BJT'],['valid_times','实际参与有效时间BJT'],['lead_selection','时效检验方式'],['lead_group_bounds','分组边界小时'],...(!groupSummary()?[['lead_hours','实际参与时效小时'],['forecast_count','时效时刻组合数']]:[])];download(new Blob([C.csv(tableRows.map(r=>({...r,model:label(r.model)})),cols)],{type:'text/csv;charset=utf-8'}),`${activeModels().some(m=>window.DemoModels.profile(m))?'WN3演示_':''}检验_${exportElement()}_${view}_${$('end').value}.csv`);};
 $('export-svg').onclick=()=>{const svg=$('chart').querySelector('svg');if(!svg)return;const copy=svg.cloneNode(true),style=document.createElementNS('http://www.w3.org/2000/svg','style');for(const point of copy.querySelectorAll('.point')){const d=point.querySelector('desc');if(d){const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=d.textContent;d.replaceWith(title);}for(const name of ['role','tabindex','aria-pressed'])point.removeAttribute(name);point.classList.remove('is-selected');}style.textContent='text{font-family:"Microsoft YaHei",sans-serif;font-size:11px;fill:#718593}.grid{stroke:#edf2f5;stroke-width:1}.axis{stroke:#d5e1e9;stroke-width:1}';copy.prepend(style);download(new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml;charset=utf-8'}),`${activeModels().some(m=>window.DemoModels.profile(m))?'WN3演示_':''}检验_${exportElement()}_${view}.svg`);};
 
-document.querySelectorAll('[data-kind]').forEach(b=>b.onclick=async()=>{if(await window.GridVerification.open())setKind(b.dataset.kind);});
+document.querySelectorAll('[data-kind]').forEach(b=>b.onclick=async()=>{if(await window.GridVerification.open())await changeKind(b.dataset.kind);});
 document.querySelectorAll('[data-circulation-field]').forEach(b=>b.onclick=()=>setCirculationField(b.dataset.circulationField));
 document.querySelectorAll('[data-days]').forEach(b=>b.onclick=()=>dates(b.dataset.days));
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});
@@ -563,14 +625,14 @@ document.querySelectorAll('[data-time-sample]').forEach(b=>b.onclick=()=>{timeCo
 document.querySelectorAll('[data-score-scope]').forEach(b=>b.onclick=()=>{scoreScope=b.dataset.scoreScope;render();});
 document.querySelectorAll('[data-lead-mode]').forEach(b=>b.onclick=()=>{
   leadMode=b.dataset.leadMode;
-  if(leadMode==='group')scoreScope='period';
+  if(leadMode==='group'){scoreScope='period';fitGroupModels();}
   render();
 });
 $('dataset').onchange=setDataset;
 for(const id of ['metric','threshold','lead','hour','common','single','valid','time-mode','across-leads'])$(id).onchange=render;
 for(const id of ['start','end'])$(id).onchange=()=>{document.querySelectorAll('[data-days]').forEach(b=>b.classList.remove('chosen'));render();};
 $('models-all').onclick=()=>{selected=new Set(ds.models);modelControls();render();};
-$('models-default').onclick=()=>{selected=new Set(ds.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m)));modelControls();render();};
+$('models-default').onclick=()=>{selected=new Set(defaultModels(ds));modelControls();render();};
 async function load(){
   if(ds)remember();
   const previous=ds?.id||preferences.dataset,targetKind=ds?kind:preferences.kind||kind;
@@ -579,7 +641,7 @@ async function load(){
     const response=await fetch('./api/catalog'+(ds?'?refresh=1':''),{cache:'no-store',signal:AbortSignal.timeout(65000)});
     if(!response.ok)throw new Error('HTTP '+response.status);
     const next=await response.json();if(!Array.isArray(next.rows)||!next.datasets?.length)throw new Error('暂无可识别的检验归档');
-    await window.DemoModels.ready();catalog=C.demoCatalog(C.unifiedCatalog(next),window.DemoModels.profiles(),WN3);
+    await window.DemoModels.ready();stationLoading=null;catalog=C.demoCatalog(C.unifiedCatalog(next),window.DemoModels.profiles(),WN3);
     const combined=catalog.datasets.find(d=>matchesPrevious(d,previous));
     const preferred=combined?.id;
     if(combined&&previous!==combined.id&&!preferences.datasets[combined.id]){
@@ -587,6 +649,7 @@ async function load(){
       preferences.datasets[combined.id]={...saved,models:previous?.startsWith('compare:')?saved.models:combined.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m))};
     }
     preferences.unifiedVersion=1;
+    if(gridReference==='station')await ensureStationRows();
     setKind(catalog.datasets.some(d=>d.kind===targetKind)?targetKind:'降水',preferred);
     $('catalog-status').textContent='';$('catalog-status-wrap').hidden=true;success=true;
   }catch(error){
@@ -596,6 +659,51 @@ async function load(){
   }finally{$('refresh').disabled=false;}
   return success;
 }
+// Station products join only the browser catalog. Grid catalog/API and score reducers stay shared.
+async function ensureStationRows(){
+  if(stationLoading)return stationLoading;
+  const target=catalog;
+  stationLoading=(async()=>{
+    const response=await fetch('./api/stations/grid-datasets',{cache:'no-store'});
+    if(!response.ok)throw Error('站点资料暂不可用');
+    const datasets=await response.json();if(!datasets.length)throw Error('站点共用图表尚未完成离线评分');
+    const products=await Promise.all(datasets.map(async dataset=>{
+      const response=await fetch('./api/stations/grid-rows?'+new URLSearchParams({dataset:dataset.id}),{cache:'no-store'});
+      if(!response.ok)throw Error('站点图表资料暂不可用');
+      return {dataset,rows:await response.json()};
+    }));
+    if(target!==catalog)return;
+    for(const product of products){target.datasets.push(product.dataset);target.rows=target.rows.concat(product.rows);}
+    target.origins=[...(target.origins||[]),...datasets];
+  })().catch(error=>{stationLoading=null;throw error;});
+  return stationLoading;
+}
+async function changeKind(value,preferred){
+  try{if(gridReference==='station'&&['降水','气温'].includes(value))await ensureStationRows();setKind(value,preferred);}
+  catch(error){$('load-error').hidden=false;$('load-error').textContent=error.message;}
+}
+async function setReference(reference){
+  if(!['grid','station'].includes(reference))return false;
+  const sequence=++referenceSequence,previous=gridReference;
+  try{
+    if(!catalog&&!(await window.GridVerification.open()))return false;
+    if(reference==='station')await ensureStationRows();
+    if(sequence!==referenceSequence)return false;
+    remember();const old=ds,oldState=preferences.datasets[old?.id];gridReference=reference;
+    const target=catalog.datasets.find(d=>d.kind===kind&&referenceMatches(d)&&d.accumulation===old?.accumulation)
+      ||catalog.datasets.find(d=>d.kind===kind&&referenceMatches(d));
+    if(target&&oldState&&!preferences.datasets[target.id])preferences.datasets[target.id]={...oldState,models:oldState.models.length===defaultModels(old).length&&oldState.models.every(m=>defaultModels(old).includes(m))?defaultModels(target):oldState.models.filter(m=>target.models.includes(m))};
+    localStorage.setItem('gridReference',reference);$('load-error').hidden=true;
+    setKind(kind,target?.id);return true;
+  }catch(error){gridReference=previous;$('load-error').hidden=false;$('load-error').textContent=error.message;return false;}
+}
+function stationSelection(){
+  const models=activeModels();
+  return {station:stationDataset(),kind,model:models[0],modelLabel:label(models[0]),models:models.map(model=>({model,label:label(model),color:color(model)})),variable:ds?.var,
+    start:$('start').value,end:$('end').value,leads:ds?ds.leads.filter(lead=>groupActive()?C.inLeadGroup(lead,leadGroup):manyLeads()||lead===Number($('lead').value)):[],
+    allLeads:ds?ds.leads:[],
+    updated:ds?.updated,metric:$('metric').value,threshold:Number($('threshold').value),lead:Number($('lead').value),reference:gridReference};
+}
 let gridLoading=null;
-window.GridVerification={open(){if(catalog){window.DemoModels.gridNotice(kind,activeModels());return Promise.resolve(true);}if(!gridLoading)gridLoading=load().finally(()=>gridLoading=null);return gridLoading;},refresh:load};
+window.GridVerification={setReference,selection:stationSelection,reference:()=>gridReference,open(){if(catalog){window.DemoModels.gridNotice(kind,activeModels());return Promise.resolve(true);}if(!gridLoading)gridLoading=load().finally(()=>gridLoading=null);return gridLoading;},refresh:load};
 $('refresh').onclick=load;

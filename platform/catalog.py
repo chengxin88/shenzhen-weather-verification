@@ -89,12 +89,11 @@ def build_catalog():
                 if record.get('schema')!=1:
                     skipped+=1; continue
                 result=record['result']; meta=metadata(path,result,hashes,record.get("parameters"))
-                if not meta:
+                if not meta or meta.get('pilot'):
                     skipped+=1; continue
                 accepted+=1; created=float(record['created_at']); updated=float(record.get('updated_at',created)); newest=max(newest,updated)
                 frame=result['per_cycle'] if meta['source']=='weekly' else result[0]
                 dataset_id=f"{meta['source']}-{meta['kind']}-{meta['accumulation'] or meta['level'] or '2m'}"
-                if meta.get("pilot"):dataset_id="wn3-pilot-"+dataset_id
                 datasets.setdefault(dataset_id,dict(id=dataset_id,**meta))
                 failures=result.get('failures') if meta['source']=='weekly' else result[1]
                 if failures is not None and hasattr(failures,'to_dict'):
@@ -135,7 +134,6 @@ def build_catalog():
         item['leads']=sorted({r['lead'] for r in items})
         item['thresholds']=sorted({r['threshold'] for r in items if r['threshold'] is not None})
         item['times']=sorted({r['valid'] for r in items})
-        if item.get('pilot'):item['source_note']='WeatherNext 3小范围试接入：深圳2米气温官方0.1°集合均值，UTC00起报/+24h，按已有市域格点双线性插值匹配；当前单时次结果只用于接入验证。'
         item['reference']='GDAS 分析场' if item['kind']=='环流' else '深圳开放数据格点分析场'
         item['region']='108–120°E / 18–27°N' if item['kind']=='环流' else '深圳市行政区域'
         item['updated']=datetime.fromtimestamp(max(r.get('updated',r['created']) for r in items),BJT).isoformat()

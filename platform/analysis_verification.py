@@ -25,13 +25,15 @@ WN3 = 'Google WeatherNext 3（集合均值）'
 MODELS = ('ECMWF-IFS', 'NCEP-GFS', WN3)
 APP_CACHE = Path('/home/chengyang/ec-gfs-server/cache')
 NATIVE_MODELS = {'ecmwf':('ECMWF-IFS','ECMWF-IFS'), 'gfs':('NCEP-GFS','NCEP-GFS'),
-                 'aifs':('ECAI','ECMWF-AIFS'), 'aigfs':('GFSAI','NCEP-AIGFS')}
-SURFACE_MODELS = ('ECMWF-IFS','ECAI','NCEP-GFS','GFSAI',WN3)
+                 'aifs':('ECAI','ECMWF-AIFS'), 'aigfs':('GFSAI','NCEP-AIGFS'),
+                 'gefs':('GEFS集合平均','GEFS集合平均')}  # GEFS frames live in cache/native-backfill (test-platform data)
+SURFACE_MODELS = ('ECMWF-IFS','ECAI','NCEP-GFS','GFSAI','GEFS集合平均',WN3)
 PRESSURE_MODELS = ('ECMWF-IFS','ECAI','ECMWF-ENSEMBLES平均','NCEP-GFS','GFSAI','Google WeatherNext 2',WN3)
 SPECS = {'mslp': ('海平面气压', ('mslp',), 'hPa', None),
          'wind10': ('10 米风场', ('u10', 'v10'), 'm/s', 10),
          'wind100': ('100 米风场', ('u100', 'v100'), 'm/s', 100)}
 VERSION = 'analysis-fields-v1'
+ENABLE_GDAS = False  # GDAS 暂不下载、不评分；已有的 gdas 参考场和 memo 保留
 _thread = None
 _guard = threading.Lock()
 
@@ -194,7 +196,8 @@ def candidates(now):
     from native_archive import wn3_manifest
     found = []
     for slug,(model,file_model) in NATIVE_MODELS.items():
-        for path in sorted((WEATHER/'region-v4'/slug).glob(f'{slug}_??????????_f???_global1.json')):
+        frames = Path(__file__).resolve().parent/'cache/native-backfill'/slug if slug == 'gefs' else WEATHER/'region-v4'/slug
+        for path in sorted(frames.glob(f'{slug}_??????????_f???_global1.json')):
             match = re.fullmatch(slug+r'_(\d{10})_f(\d{3})_global1.json',path.name)
             run = datetime.strptime(match[1],'%Y%m%d%H').replace(tzinfo=UTC); lead=int(match[2]); valid=run+timedelta(hours=lead)
             if lead in LEADS and now-timedelta(days=31)<=valid<=now-timedelta(hours=6):
@@ -363,7 +366,7 @@ def score_pairs(predictions,observations,mask,element,level):
 
 def datasets_for(rows,now):
     result=[]
-    for reference,source in [('ERA5 再分析','era5'),('GDAS 分析场','gdas')]:
+    for reference,source in [('ERA5 再分析','era5')]+([('GDAS 分析场','gdas')] if ENABLE_GDAS else []):
         source_times=[r['valid'] for r in rows if r['dataset'].startswith(f'analysis-{source}-')]
         for element,level in [(k,None) for k in SPECS]+([(None,l) for l in LEVELS] if source=='era5' else []):
             ident=f'analysis-{source}-{element or level}';items=[r for r in rows if r['dataset']==ident]
@@ -378,7 +381,7 @@ def datasets_for(rows,now):
             note+='预报双线性插值到固定0.25°分析网格；同一时效、有效时间和要素的已接入模式使用共同有效格点。'
             note+='风场按离地高度配对。' if element and element.startswith('wind') else '等压面地下格点已按ERA5地面气压屏蔽。' if level else '海平面气压已统一为hPa。'
             empty='当前没有已配对评分；不会使用其他高度或参考资料替代。'
-            if source=='era5' and element=='wind100' and not items: empty='本地ERA5尚未缓存100米风参考场；可切换GDAS查看已有100米风评分。'
+            if source=='era5' and element=='wind100' and not items: empty='本地ERA5尚未缓存100米风参考场。'+('可切换GDAS查看已有100米风评分。' if ENABLE_GDAS else '')
             result.append(dict(id=ident,kind='地面' if element else '环流',element=element,label=label,source='analysis',reference=reference,
                 accumulation=None,level=level,height_m=SPECS[element][3] if element else None,unit=SPECS[element][2] if element else 'm',
                 models=models,supported_models=supported,model_issues=issues,has_n=True,region='108–120°E / 18–27°N',source_note=note,availability_note=empty,
@@ -395,7 +398,7 @@ def refresh(fetch_limit=4):
         except BlockingIOError: return
         now=datetime.now(UTC); jobs=candidates(now);valids={j['valid'] for j in jobs}
         prepare_era5(valids)
-        transferred=fetch_gdas({v for v in valids if v>=now-timedelta(days=7) and v.hour%6==0},fetch_limit)
+        transferred=fetch_gdas({v for v in valids if v>=now-timedelta(days=7) and v.hour%6==0},fetch_limit) if ENABLE_GDAS else 0
         try: old=json.loads((CACHE/'memo.json').read_text());memo=old['entries'] if old.get('version')==VERSION else {}
         except (OSError,ValueError,KeyError):memo={}
         updated={};rows=[];errors=0;groups={}
@@ -406,7 +409,7 @@ def refresh(fetch_limit=4):
                 if meta.get('version')!=VERSION:raise ValueError('Reference schema mismatch')
                 return z['lon'],z['lat'],{key:z[key] for key in meta['fields']},meta
         for j in jobs:
-            for source in ('gdas','era5'):
+            for source in (('gdas','era5') if ENABLE_GDAS else ('era5',)):
                 ref=CACHE/'references'/f"{source}_{j['valid']:%Y%m%d%H}.npz"
                 if not ref.exists():continue
                 x,y,fields,metadata=reference_data(str(ref))
@@ -454,6 +457,8 @@ def refresh(fetch_limit=4):
             for index,(entries,failures) in enumerate(executor.map(compute_group,groups.items())):
                 updated.update(entries);rows.extend(item['row'] for item in entries.values());errors+=failures
                 if index%100==0:print('Scored groups',index+1,'/',len(groups),'rows',len(rows),'validation failures',errors,flush=True)
+                # Checkpoint: a restart then resumes from memo hits instead of rescoring everything.
+                if index%500==499:atomic_json(CACHE/'memo.json',dict(version=VERSION,entries={**memo,**updated}))
         atomic_json(CACHE/'memo.json',dict(version=VERSION,entries=updated))
         out=dict(version=VERSION,datasets=datasets_for(rows,now),rows=rows,generated=iso(now),validation_failures=errors,reference_download_bytes=transferred)
         atomic_json(CACHE/'catalog.json',out)

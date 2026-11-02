@@ -1,0 +1,15 @@
+[Unit]
+Description=Newly published forecast data quality control
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/chengyang/verification-test/incremental-qc
+EnvironmentFile=-/home/chengyang/.config/weather-qc.env
+ExecStart=/usr/bin/python3 /home/chengyang/verification-test/incremental-qc/qc_monitor.py --daemon
+Restart=on-failure
+RestartSec=15
+UMask=0077
+
+[Install]
+WantedBy=default.target

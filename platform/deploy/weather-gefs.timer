@@ -1,0 +1,10 @@
+[Unit]
+Description=GEFS ensemble-mean fetch every six hours (02/08/14/20:20 UTC)
+
+[Timer]
+OnCalendar=*-*-* 02,08,14,20:20:00 UTC
+Persistent=true
+Unit=weather-gefs.service
+
+[Install]
+WantedBy=timers.target

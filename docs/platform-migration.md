@@ -34,3 +34,7 @@ Open-Meteo 的三个链接目标已复制成真实文件，避免仓库只包含
 - 前端 `test_demo_core.js` 通过。
 - Python 源码解析、暂存差异格式、缓存与本地配置排除规则通过检查。
 - 旧版 Streamlit 入口和专用配置已移除，根目录依赖清单指向当前平台；公共格网和边界资料保留。
+
+## 2026-11-02 同步
+
+`platform/` 按 WSL `~/verification-test` 本地仓库提交 `7e8a284`（main）整体同步，清单见 `platform-source-manifest.json`。新增站点检验模块（OGIMET SYNOP / NOAA GHCNh / IEM METAR，104–121°E、18–27°N）、离线底图、GEFS 与 EC 集合下载、OGIMET 网络故障重试与企业微信断档提醒，以及对应的 systemd 单元示例（`deploy/`）。`.env.example`、`README.md`、`requirements.txt` 保持不变；运行数据、缓存和本地凭据仍不纳入。
