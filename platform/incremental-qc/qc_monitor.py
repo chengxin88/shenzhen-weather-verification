@@ -7,6 +7,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]/'gods-eye-weather/weather_backend'))
+from wn3_storage import logical_path, file_stat, read_text, open_read, load_array, read_path, union_glob
+
 import sqlite3
 import time
 import urllib.parse
@@ -16,7 +20,7 @@ import numpy as np
 UTC=dt.timezone.utc
 BJT=dt.timezone(dt.timedelta(hours=8))
 MODELS=('ecmwf','gfs','aifs','aigfs','weathernext3')
-ROOT=Path('/home/chengyang/gods-eye-weather/weather-data/region-v4')
+ROOT=Path('/home/yjzx/verification-platform/gods-eye-weather/weather-data/region-v4')
 
 def stamp(value):
     t=dt.datetime.fromisoformat(value.replace('Z','+00:00'))
@@ -24,7 +28,7 @@ def stamp(value):
     return t
 
 def signature(p):
-    s=p.stat()
+    s=file_stat(read_path(p))
     return str(s.st_mtime_ns)+':'+str(s.st_size)
 
 def array_check(a,key,shape,problems):
@@ -50,7 +54,7 @@ def array_check(a,key,shape,problems):
 
 def check_frame(p,started):
     problems=[]
-    d=json.loads(p.read_text())
+    d=json.loads(read_text(p))
     run=stamp(d['run']);valid=stamp(d['valid']);lead=d['lead']
     if run.timestamp()<started-86400:
         return {'status':'skipped','detail':['historical run excluded'],'run':d['run'],'lead':lead,'arrays':0}
@@ -74,7 +78,7 @@ def check_frame(p,started):
         raise ValueError('invalid field directory')
     fd=p.parent/name
     if fd.is_symlink() or fd.resolve().parent!=p.parent.resolve():raise ValueError('unsafe field directory')
-    keys={q.stem:q for q in fd.glob('*.npy')}
+    keys={q.stem:read_path(q) for q in union_glob(fd,'*.npy')}
     expected={'surface_t','surface_u','surface_v','surface_msl'}
     support_rh=d.get('capabilities',{}).get('surface_rh',slug!='aigfs')
     if support_rh:expected.add('surface_rh')
@@ -105,7 +109,7 @@ def check_frame(p,started):
                 array_check(a.reshape(shape),key,shape,problems);arrays+=1
             except Exception:problems.append(('error',key+': unreadable embedded data'))
     if slug=='weathernext3':
-        manifest=p.parent/('run_'+run.strftime('%Y%m%d%H')+'.json')
+        manifest=read_path(p.parent/('run_'+run.strftime('%Y%m%d%H')+'.json'))
         if not manifest.is_file():
             return {'status':'pending','detail':['native publication manifest not yet available'],'arrays':arrays}
         else:
@@ -119,7 +123,7 @@ def check_frame(p,started):
                 for key,unit in [('surface_t','degC'),('rain1h','mm')]:
                     q=p.parent/directory/run.strftime('%Y%m%d%H')/('f'+str(lead).zfill(3)+'_'+key+'.npz')
                     try:
-                        with np.load(q,allow_pickle=False) as z:
+                        with load_array(q,allow_pickle=False) as z:
                             meta=json.loads(str(z['meta'].item()));a=z['values'];nx=z['lon'];ny=z['lat']
                             if (stamp(meta['run'])!=run or stamp(meta['valid'])!=valid or meta.get('lead')!=lead or meta.get('field')!=key or meta.get('unit')!=unit or meta.get('statistic')!='mean'):
                                 problems.append(('error',key+': native identity/unit mismatch'))
@@ -139,7 +143,7 @@ class Monitor:
         row=self.db.execute("SELECT v FROM meta WHERE k='started'").fetchone();self.started=float(row[0]) if row else None
     def files(self):
         for slug in MODELS:
-            yield from (self.root/slug).glob(slug+'_*.json')
+            yield from union_glob(self.root/slug,slug+'_*.json')
     def init(self):
         if self.started is not None:raise RuntimeError('already initialized; refusing to reset baseline')
         if not self.root.is_dir():raise RuntimeError('data root missing')

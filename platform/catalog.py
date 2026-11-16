@@ -13,7 +13,7 @@ import tomllib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-APP = Path(os.getenv('VERIFICATION_APP_ROOT', '/home/chengyang/ec-gfs-server'))
+APP = Path(os.getenv('VERIFICATION_APP_ROOT', '/home/yjzx/verification-platform/ec-gfs-server'))
 MODELS = ('ECMWF-IFS', 'ECAI', 'ECMWF-ENSEMBLES平均', 'NCEP-GFS', 'GFSAI', 'Google WeatherNext 2')
 OLD_MODELS = MODELS
 WN3 = "Google WeatherNext 3（集合均值）"
@@ -140,7 +140,7 @@ def build_catalog():
     native_status='ok'
     try:
         from native_archive import cached_native
-        native_sets,native_rows,_=cached_native(APP,Path('/home/chengyang/gods-eye-weather/weather-data'),Path(__file__).with_name('native-scores.json'))
+        native_sets,native_rows,_=cached_native(APP,Path('/home/yjzx/verification-platform/gods-eye-weather/weather-data'),Path(os.environ.get('NATIVE_SCORES_PATH',str(Path(__file__).with_name('native-scores.json')))))
         data.extend(native_rows)
         for d in native_sets:datasets[d['id']]=d
     except Exception:
@@ -169,8 +169,8 @@ def build_catalog():
         last_valid_bjt=max((r['valid'] for r in wn3_native),default=None),
         elements=[dict(kind=kind,accumulation=3 if kind=='降水' else None,
             paired_forecasts=len({(r['run'],r['lead'],r['valid']) for r in wn3_native
-                if ('降水' if 'H' in r else '气温')==kind})) for kind in ('气温','降水')],
-        notice='WN3使用本机原生0.1°集合均值；标准2米气温和连续完整小时段组成的3小时降水。只统计已有预报与实况完成配对的时次，不下载上游资料。')
+                if ('降水' if 'H' in r else '气温')==kind and r['dataset']!='hk-降水-1'})) for kind in ('气温','降水')],
+        notice='WN3使用本机原生0.1°集合均值；标准2米气温、1小时降水和连续完整小时段组成的3小时降水。只统计已有预报与实况完成配对的时次，不下载上游资料。')
     return dict(version=2, generated=datetime.now(BJT).isoformat(), source_updated=datetime.fromtimestamp(newest,BJT).isoformat() if newest else None,
         datasets=list(datasets.values()), rows=data,native_status=native_status,analysis_status=analysis_status,openmeteo_status=openmeteo_status,weathernext3=wn3_status,
         status=dict(accepted=accepted,unverified=skipped,unreadable=failed),

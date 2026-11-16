@@ -1,0 +1,39 @@
+{
+  "raw": {
+    "files": 2,
+    "records": 8448,
+    "duplicates": 0,
+    "conflicts": 0
+  },
+  "unique": 8448,
+  "start": "2026-11-03T03:00:00+00:00",
+  "end": "2026-11-09T00:00:00+00:00",
+  "baseline_stations": 137,
+  "overlap": 35,
+  "new": 141,
+  "merged_stations": 278,
+  "rows_by_variable": {
+    "t": 8448,
+    "msl": 8446,
+    "wind": 8448,
+    "td": 8448,
+    "rain6": 8272,
+    "rain12": 7920,
+    "rain24": 7216
+  },
+  "qc_flags": {},
+  "selected_by_variable": {
+    "t": 8448,
+    "msl": 8446,
+    "wind": 8448,
+    "td": 8448,
+    "rain6": 8272,
+    "rain12": 7920,
+    "rain24": 7216
+  },
+  "provinces": {
+    "45": 74,
+    "44": 86,
+    "46": 16
+  }
+}

@@ -38,3 +38,7 @@ Open-Meteo 的三个链接目标已复制成真实文件，避免仓库只包含
 ## 2026-11-02 同步
 
 `platform/` 按 WSL `~/verification-test` 本地仓库提交 `7e8a284`（main）整体同步，清单见 `platform-source-manifest.json`。新增站点检验模块（OGIMET SYNOP / NOAA GHCNh / IEM METAR，104–121°E、18–27°N）、离线底图、GEFS 与 EC 集合下载、OGIMET 网络故障重试与企业微信断档提醒，以及对应的 systemd 单元示例（`deploy/`）。`.env.example`、`README.md`、`requirements.txt` 保持不变；运行数据、缓存和本地凭据仍不纳入。
+
+## 2026-11-16 同步
+
+平台 11 月初从笔记本 WSL 搬到 Spark 服务器，`platform/` 这次按 Spark `verification-platform/verification-test` 本地仓库提交 `237efc5`（分支 `spark`）整体同步，清单见 `platform-source-manifest.json`。和 11-02 相比新增：国家站（中国气象数据网）资料接入和站点坐标修正、湖南及华南区域、考核总览页、短时预报检验页、个例检验页改版、规范评分、台风检验（含 Pangu 路径）、高空环流、站点评分汇总提速（按日增量汇总）、页面日期窗口改为近 3/7/15 天、站点配对只保留 16 天，以及各项对应的测试、任务书和报告（`evidence/` 为验收截图和数据，测试日志 `*.log` 按仓库忽略规则不纳入）。`openmeteo_ecmwf.py`、`openmeteo_regional.py` 在 Spark 上是指向共用目录的链接，这里放的是实际内容。`.env.example`、`README.md`、`requirements.txt` 保持不变；运行数据、缓存和本地凭据（`deploy/env`、`.streamlit/secrets.toml`）仍不纳入。

@@ -238,6 +238,22 @@ def select_observations(rows, stations):
     METAR's closest whole report within ±10 minutes is chosen per station/hour,
     with earlier report as deterministic tie breaker; missing fields stay missing.
     """
+    # Finish the legacy selection, including derived rain12, before filling
+    # holes. NMIC must not change a legacy accumulation via a new rain6 part.
+    if any(r['source'] == 'nmic' for r in rows):
+        result = select_observations([r for r in rows if r['source'] != 'nmic'], stations)
+        synop = {s['id'] for s in stations if s['type'] == 'synop'}
+        # 用户 2026-11-11 定：广东、广西、海南三省内以国家站为准（有国家站值就用它，
+        # 没有的时次和要素仍用原来源）；其余只补空。2026-11-12 加入湖南（43），和华南同样处理。
+        # 每个键的值始终只来自一个来源。
+        primary = {s['id'] for s in stations if str(s.get('province_code')) in ('43', '44', '45', '46')}
+        for item in rows:
+            at = stamp(item['time'])
+            if item['source'] == 'nmic' and not item['flags'] and item['station'] in synop and not (at.minute or at.second or at.hour % 3):
+                key = (item['station'], item['time'], item['var'])
+                if item['station'] in primary: result[key] = item
+                else: result.setdefault(key, item)
+        return result
     types = {s['id']: s['type'] for s in stations}; result = {}; closest={}
     for item in rows:
         if types.get(item['station'])!='metar' or item['var'] not in ('t','td','wind'):
@@ -268,17 +284,38 @@ def select_observations(rows, stations):
             if at.minute or at.second or at.hour % 3:
                 continue
             key = item['station'], item['time'], item['var']
-            if key not in result or item['source'] == 'ogimet':
+            # 2026-11-16 用户同意：雨量以地面报文（ogimet）为准，开放数据（szopen）只在没有报文时兜底；
+            # 气温、露点、风仍是开放数据优先。国家站（nmic）在外层另行覆盖。
+            rain = item['var'].startswith('rain'); current = result.get(key)
+            if current is None or (item['source'] == 'szopen' and not (rain and current['source'] == 'ogimet')) \
+                    or (item['source'] == 'ogimet' and (current['source'] != 'szopen' or rain)):
                 result[key] = item
+    return derive_rain12(result)
+
+
+def derive_rain12(result):
+    """Two accepted consecutive 6 h totals make (t-12h, t]; SYNOP has no 12 h group of its own."""
+    for (station, at, variable), item in list(result.items()):
+        if variable != 'rain6':
+            continue
+        earlier = result.get((station, iso(stamp(at) - timedelta(hours=6)), 'rain6'))
+        if earlier is not None:
+            result[station, at, 'rain12'] = {**item, 'var': 'rain12', 'hours': 12, 'value': item['value'] + earlier['value'],
+                                             'trace': bool(item['value'] + earlier['value'] < .1 and (item.get('trace') or earlier.get('trace')))}
     return result
 
 
-def load_observations(root, stations, end):
-    cutoff = end - timedelta(days=31); ids = {s['id'] for s in stations}
+def load_observations(root, stations, end, archive_only=()):
+    """`archive_only` stations reach the archive, which decides who is active, but are not scored."""
+    cutoff = end - timedelta(days=31); everyone = [*stations, *archive_only]; ids = {s['id'] for s in everyone}
     og, reports, unknown, diagnostics = ogimet_rows(root / 'raw', ids, cutoff, end)
-    gh, ghdiag = ghcnh_rows(root / 'raw', stations, cutoff, end)
+    gh, ghdiag = ghcnh_rows(root / 'raw', everyone, cutoff, end)
     metar = iem_rows(root / 'raw', ids, cutoff, end)
-    rows = qc_rows(deduplicate(og + gh + metar))
+    import sz_district_obs
+    district = sz_district_obs.observation_rows(stations, end, cutoff)
+    import nmic_obs
+    nmic = nmic_obs.observation_rows(everyone, end, cutoff, root)
+    rows = qc_rows(deduplicate(og + gh + metar + district + nmic))
     # Canonical source records include raw groups and all observation QC flags.
     with gzip.open(root / 'synop-decoded.jsonl.gz', 'wt') as handle:
         for report in reports:
@@ -293,9 +330,11 @@ def load_observations(root, stations, end):
             for item in items:
                 handle.write(json.dumps(item, separators=(',', ':')) + '\n')
         temporary.replace(path)
+    scored = {s['id'] for s in stations}
+    rows = [r for r in rows if r['station'] in scored]
     summary = {}
     last30 = [r for r in rows if r['time'] >= iso(end - timedelta(days=30))]
-    for source in ('ogimet', 'ghcnh', 'iem'):
+    for source in ('ogimet', 'ghcnh', 'iem', 'nmic'):
         items = [r for r in last30 if r['source'] == source]
         summary[source] = dict(latest=max((r['time'] for r in items), default=None),
                                stations=len({r['station'] for r in items}),

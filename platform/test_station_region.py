@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 import numpy as np
-from build_stations import build
+from build_stations import build, candidates
+from station_common import XINJIANG
 from station_common import BOX, ROOT, UTC, atomic_json, iso
 from station_forecasts import forecast_runs, read_native_frame, native, interpolate
 from station_sources import iem
@@ -15,7 +16,7 @@ import station_score
 
 
 class StationRegionTests(unittest.TestCase):
-    def test_wn3_reader_samples_western_stations_with_shared_27_north_cap(self):
+    def test_wn3_reader_samples_western_stations_with_shared_33_north_cap(self):
         run = datetime(2026,10,25,tzinfo=UTC)
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary)/'f003_surface_t.npz'
@@ -27,25 +28,59 @@ class StationRegionTests(unittest.TestCase):
                         bounds=bounds,statistic='mean',source_kind='earth-engine-region',source_sha256='0'*64)
             np.savez_compressed(path,lon=x,lat=y,values=np.full((len(y),len(x)),21,np.float32),meta=json.dumps(meta))
             lon,lat,values = native().load_wn3_field(path,run,3,'surface_t','native-southern-china-v2')
-            self.assertEqual((lon[0],lon[-1],lat[0],lat[-1]),(104,121,18,27))
+            self.assertEqual((lon[0],lon[-1],lat[0],lat[-1]),(97,123,18,33))
             self.assertEqual(interpolate(values,lon,lat,[(106.6,23.9)])[0],21)
 
-    def test_station_builder_includes_west_and_caps_at_27_north(self):
+    def test_hong_kong_record_replaces_the_stale_china_twin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            points = [('CHU00045007', 22.33, 114.2, 'KAI TAK'), ('HKU045007-1', 22.32, 113.92, 'AIRPORT'),
+                      ('HKU045044-1', 22.2, 114.02, 'CHEUNGCHAU')]
+            (root/'ghcnh-station-list.txt').write_text('\n'.join(
+                f'{ident:11} {lat:8.4f} {lon:9.4f} {8:6.1f}    {name}' for ident, lat, lon, name in points))
+            found = candidates(root)
+            self.assertEqual(found['45007']['lon'], 113.92)
+            self.assertEqual(found['45044']['name'], 'CHEUNGCHAU')
+
+    def test_station_builder_includes_west_and_caps_at_33_north(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             points = [('CHM00059211', 23.9, 106.6), ('CHM00057602', 28.8, 105.4),
-                      ('CHM00058850', 26.9, 120.1), ('CHM00059152', 24.8, 121.5)]
+                      ('CHM00058850', 26.9, 120.1), ('CHM00059152', 24.8, 121.5),
+                      ('CHM00053000', 33.5, 110.0), ('CHM00056000', 25.0, 96.5)]
             lines = [f'{ident:11} {lat:8.4f} {lon:9.4f} {175:6.1f}    TEST STATION'
                      for ident, lat, lon in points]
             (root/'ghcnh-station-list.txt').write_text('\n'.join(lines))
             (root/'ghcnh-inventory.xml').write_text('<ListBucketResult/>')
             atomic_json(root/'CN__ASOS.geojson', {'features': []})
             table = build(root, root/'stations.json')
-            self.assertEqual({s['id'] for s in table['stations']}, {'59211', '58850'})
-            self.assertEqual(table['box'], [104., 18., 121., 27.])
+            self.assertEqual({s['id'] for s in table['stations']}-set(XINJIANG), {'59211', '57602', '58850', '59152'})
+            self.assertEqual(table['box'], [97., 18., 123., 33.])
             basemap = json.loads((ROOT/'station-basemap.json').read_text())
             self.assertEqual(basemap['map_bounds'], list(BOX))
             self.assertEqual(basemap['station_bounds'], list(BOX))
+
+    def test_station_builder_moves_silent_stations_to_inactive(self):
+        import gzip
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary); root = base/'raw'; root.mkdir(); obs = base/'obs'; obs.mkdir()
+            points = [('CHM00059211', 23.9, 106.6), ('CHM00058850', 26.9, 120.1)]
+            (root/'ghcnh-station-list.txt').write_text('\n'.join(
+                f'{ident:11} {lat:8.4f} {lon:9.4f} {175:6.1f}    TEST STATION' for ident, lat, lon in points))
+            (root/'ghcnh-inventory.xml').write_text('<ListBucketResult/>')
+            atomic_json(root/'CN__ASOS.geojson', {'features': []})
+            for day in range(1, 20):
+                with gzip.open(obs/f'2026-10-{day:02}.jsonl.gz', 'wt') as handle:
+                    handle.write('{"station":"59211","time":"x","var":"t","value":1}\n')
+            table = build(root, root/'stations.json')
+            self.assertEqual(table['inactive'], [], 'too little archive: nothing pruned')
+            self.assertEqual(len(table['stations'])-len(XINJIANG), 2)
+            for day in range(20, 26):
+                with gzip.open(obs/f'2026-10-{day:02}.jsonl.gz', 'wt') as handle:
+                    handle.write('{"station":"59211","time":"x","var":"t","value":1}\n')
+            table = build(root, root/'stations.json')
+            self.assertEqual([s['id'] for s in table['stations']], ['59211'])
+            self.assertEqual([s['id'] for s in table['inactive'] if s['id'] not in XINJIANG], ['58850'])
 
     def test_sample_new_western_station_and_retain_pruned_old_values(self):
         run = datetime(2026, 10, 25, tzinfo=UTC)

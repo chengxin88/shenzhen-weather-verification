@@ -1,0 +1,44 @@
+{
+  "equal": true,
+  "existing_pairs_preserved": true,
+  "old_stations": 137,
+  "window_end": "2026-11-09T00:00:00Z",
+  "pairs": {
+    "before": 102357,
+    "after": 102357,
+    "unchanged": 102357,
+    "modified": 0,
+    "removed": 0,
+    "added": 0
+  },
+  "station_scores": {
+    "1": {
+      "equal": true,
+      "before": 18270,
+      "after": 18270
+    },
+    "3": {
+      "equal": true,
+      "before": 27405,
+      "after": 27405
+    },
+    "7": {
+      "equal": true,
+      "before": 36540,
+      "after": 36540
+    },
+    "30": {
+      "equal": true,
+      "before": 36540,
+      "after": 36540
+    }
+  },
+  "examples": [],
+  "policy": "exact floats, all pair columns; no tolerance, no ignored old-gap pairs",
+  "evidence": "actual NMIC observations/metadata; synthetic forecasts for all 9 configured models; simulated complete legacy coverage at old-site keys, not production-cache validation",
+  "observation_keys": {
+    "baseline": 11373,
+    "candidate": 57198
+  },
+  "new_stations": 141
+}

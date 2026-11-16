@@ -9,7 +9,7 @@ import requests
 
 SOURCE='sz-open-data-v1'
 LABEL='深圳开放数据格点分析场'
-APP=Path(os.getenv('VERIFICATION_APP_ROOT','/home/chengyang/ec-gfs-server'))
+APP=Path(os.getenv('VERIFICATION_APP_ROOT','/home/yjzx/verification-platform/ec-gfs-server'))
 CACHE=Path(__file__).resolve().parent/'cache'/'case_opendata_v1'
 BJT=timezone(timedelta(hours=8))
 URL='https://opendata.sz.gov.cn/api/29200_00903509/1/service.xhtml'

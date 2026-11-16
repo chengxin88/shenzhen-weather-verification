@@ -1,6 +1,8 @@
 """Offline scoring of committed Open-Meteo runs against existing observations."""
 from datetime import datetime, timedelta
 from pathlib import Path
+import os
+import guifan_scores as guifan
 import json
 import math
 import time
@@ -13,10 +15,11 @@ from shapely.ops import unary_union
 import openmeteo_ecmwf as ec
 import openmeteo_regional as regional
 
-APP = Path('/home/chengyang/ec-gfs-server')
-VERIFY = Path('/home/chengyang/verification-test')
-THRESHOLDS = [.1, 1, 3, 10, 20, 30, 50]
-REVISION = 'openmeteo-verification-v2'
+APP = Path(os.environ.get('VERIFICATION_APP_ROOT','/home/yjzx/verification-platform/ec-gfs-server'))
+VERIFY = Path(os.environ.get('VERIFICATION_AUX_ROOT',str(Path(__file__).resolve().parent)))
+SCORE_ROOT = Path(os.environ.get('OPENMETEO_SCORE_ROOT',str(ec.ROOT)))
+THRESHOLDS = [.1, 1, 3, 5, 10, 20, 30, 50]
+REVISION = 'openmeteo-verification-v2+'+guifan.REVISION
 
 
 def bjt(value):
@@ -88,7 +91,8 @@ def dataset_metadata(rows):
         times = sorted({r['valid'] for r in items})
         common = dict(id=ident,models=[ec.MODEL],supported_models=[ec.MODEL],model_issues={},has_n=True,
                       start=times[0],end=times[-1],times=times,leads=sorted({r['lead'] for r in items}),
-                      thresholds=THRESHOLDS if rain else [],updated=bjt(datetime.fromtimestamp(max(r['created'] for r in items),ec.UTC)),
+                      thresholds=sorted(set(guifan.THRESHOLDS[accumulation])|{r['threshold'] for r in items if r.get('threshold') is not None}) if rain else [],
+                      **(guifan.metadata(hours=accumulation) if rain else guifan.metadata('t') if ident=='openmeteo-气温-2m' else {}),updated=bjt(datetime.fromtimestamp(max(r['created'] for r in items),ec.UTC)),
                       level=None,accumulation=accumulation,
                       model_sources={ec.MODEL:dict(provider='Open-Meteo',api_model='ecmwf_ifs',native_grid='O1280',native_grid_km=9,
                           statistic='deterministic',elevation_correction=False,note='固定起报；原生9 km网格；未启用高程订正；CC BY 4.0')})
@@ -111,15 +115,16 @@ def dataset_metadata(rows):
 
 
 def refresh():
-    now = datetime.now(ec.UTC)
+    now = ec.stamp(os.environ['GUIFAN_SCORE_END']) if os.environ.get('GUIFAN_SCORE_END') else datetime.now(ec.UTC)
     cutoff = now-timedelta(days=31)
     grid,total = city_grid()
     targets = grid[['lon','lat']].to_numpy()
     reference_sig = [signature(APP/'data/grid.xlsx'),signature(APP/'data/shenzhen_streets.geojson')]
-    path = ec.ROOT/'score-memo.json'
+    SCORE_ROOT.mkdir(parents=True,exist_ok=True)
+    path = SCORE_ROOT/'score-memo.json'
     try:
         old = json.loads(path.read_text())
-        memo = old['entries'] if old.get('revision')==REVISION else {}
+        memo = old['entries']
     except (OSError,ValueError,KeyError):
         memo = {}
     entries, rows, errors = {}, [], 0
@@ -141,7 +146,7 @@ def refresh():
                 if not inputs:
                     continue
                 key = f'{record["id"]}:{lead}:city:{hours}'
-                sig = [source_sig,reference_sig,[signature(p) for p in inputs]]
+                sig = [guifan.REVISION,source_sig,reference_sig,[signature(p) for p in inputs]]
                 if key in memo and memo[key]['signature']==sig:
                     saved = memo[key]
                 else:
@@ -155,9 +160,12 @@ def refresh():
                         f,o = forecast[mask],observed[mask]
                         item = dict(base,n=int(mask.sum()),created=time.time(),dataset='openmeteo-气温-2m' if hours==0 else f'openmeteo-降水-{hours}')
                         if hours:
-                            scored = [dict(item,threshold=t,H=int(((f>=t)&(o>=t)).sum()),M=int(((f<t)&(o>=t)).sum()),F=int(((f>=t)&(o<t)).sum())) for t in THRESHOLDS]
+                            # Preserve previously published thresholds as well as the required period bins.
+                            previous=memo.get(key,{}).get('rows',[])
+                            thresholds=sorted(set(guifan.THRESHOLDS[hours])|{r['threshold'] for r in previous if r.get('threshold') is not None})
+                            scored = guifan.rain_rows(item,f,o,hours,thresholds=thresholds)
                         else:
-                            scored = [dict(item,threshold=None,**scalar(f,o))]
+                            scored = [dict(item,threshold=None,**guifan.accuracy(f,o),**scalar(f,o))]
                         saved = dict(signature=sig,rows=scored)
                     except (OSError,ValueError,KeyError,TypeError):
                         errors += 1
@@ -205,17 +213,23 @@ def refresh():
                         continue
                 entries[key] = saved
                 rows.extend(saved['rows'])
+    # Retain archived scores when source runs or observations have been pruned.
+    for key,saved in memo.items():
+        if key in entries:continue
+        kept=[r for r in saved.get('rows',[]) if bjt(cutoff)<=r['valid']<=bjt(now)]
+        if kept:
+            entries[key]=dict(saved,rows=kept);rows.extend(kept)
     ec.atomic_json(path,dict(revision=REVISION,entries=entries))
     result = dict(revision=REVISION,datasets=dataset_metadata(rows),rows=rows,generated=ec.iso(now),validation_failures=errors)
-    ec.atomic_json(ec.ROOT/'verification-catalog.json',result)
+    ec.atomic_json(SCORE_ROOT/'verification-catalog.json',result)
     print('Open-Meteo scores',len(rows),'datasets',len(result['datasets']),'validation failures',errors,flush=True)
     return result
 
 
 def catalog():
     try:
-        value = json.loads((ec.ROOT/'verification-catalog.json').read_text())
-        if value.get('revision')!=REVISION or not isinstance(value.get('rows'),list) or not isinstance(value.get('datasets'),list):
+        value = json.loads((SCORE_ROOT/'verification-catalog.json').read_text())
+        if not isinstance(value.get('rows'),list) or not isinstance(value.get('datasets'),list):
             raise ValueError('Invalid score catalog')
         return value
     except (OSError,ValueError):
@@ -250,3 +264,7 @@ def merge_into_catalog(extra,datasets,rows):
         item['times']=sorted({row['valid'] for row in items})
         item['start'],item['end']=item['times'][0],item['times'][-1]
         item['leads']=sorted({row['lead'] for row in items})
+
+
+if __name__ == '__main__':
+    refresh()

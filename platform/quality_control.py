@@ -6,12 +6,16 @@ no downloader, adapter or scoring code is invoked and no source file is changed.
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import argparse, json, math, os, pickle, re, subprocess, sys, tempfile, threading, time, zipfile
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
+from wn3_storage import open_read, read_text, read_bytes, load_array, file_stat, logical_path, read_path, union_glob
+
+import argparse, json, math, os, pickle, re, statistics, subprocess, sys, tempfile, threading, time, zipfile
 
 UTC = timezone.utc
 BJT = timezone(timedelta(hours=8))
-APP = Path(os.getenv('QC_APP_ROOT', '/home/chengyang/ec-gfs-server'))
-WEATHER = Path(os.getenv('QC_WEATHER_ROOT', '/home/chengyang/gods-eye-weather/weather-data'))
+APP = Path(os.getenv('QC_APP_ROOT', '/home/yjzx/verification-platform/ec-gfs-server'))
+WEATHER = Path(os.getenv('QC_WEATHER_ROOT', '/home/yjzx/verification-platform/gods-eye-weather/weather-data'))
 CACHE = Path(os.getenv('QC_CACHE_ROOT', str(Path(__file__).parent/'cache/quality-control')))
 MODELS = {'ecmwf':'ECMWF-IFS', 'gfs':'NCEP-GFS', 'aifs':'ECMWF-AIFS', 'aigfs':'NCEP-AIGFS'}
 WN3 = 'Google WeatherNext 3（集合均值）'
@@ -20,7 +24,8 @@ NPZ_LIMIT = 8_000_000
 JSON_LIMIT = 2_000_000
 CELL_LIMIT = 20_000
 SCAN_SECONDS = 120
-TTL = 300
+TTL = 420  # a little over the 5-minute timer, so a page opened between scans does not start an extra one
+HISTORY_DAYS = 8
 RULE_REVISION = 'seasonal-layer-v1'
 # Converted cache units are verified from their writers. Bounds are review alerts,
 # not an assertion that a rare extreme is impossible.
@@ -76,8 +81,9 @@ def times(d, prefix):
 
 
 def load_json(path):
+    path=read_path(path)
     if path.stat().st_size > JSON_LIMIT: raise ValueError('bounded JSON')
-    d = json.loads(path.read_text())
+    d = json.loads(read_text(path))
     if not isinstance(d, dict): raise ValueError('object')
     return d
 
@@ -178,6 +184,26 @@ def issue(s, severity, code, message, run=None, lead=None, field=None):
     if lead is not None: row['lead_hours'] = lead
     if field is not None: row['field'] = field
     if len(s['issues']) < 80: s['issues'].append(row)
+
+
+RETRY_REASONS = (('accumulation decreased','累计降水比前一时效小'),
+                 ('cannot form exact six-hour interval','凑不出完整的 6 小时降水'))
+
+
+def retry_message(errors):
+    """Say which leads the downloader is still retrying and why, instead of only a count."""
+    groups={}
+    for row in errors if isinstance(errors,list) else []:
+        if not isinstance(row,dict): continue
+        reason=str(row.get('reason',''))
+        label=next((zh for key,zh in RETRY_REASONS if key in reason),'未通过入库校验')
+        groups.setdefault(label,[]).append(row.get('lead'))
+    parts=[]
+    for label,leads in groups.items():
+        shown=[f'+{lead}h' for lead in leads if type(lead) is int][:6]
+        more=f' 等 {len(leads)} 个时效' if shown and len(leads)>len(shown) else ''
+        parts.append(f'{"、".join(shown) or f"{len(leads)} 项"}{more}（{label}）')
+    return f'{len(errors)} 个时效未入库，等待下载程序重试'+(f'：{"；".join(parts)}。' if parts else '。')
 
 
 def freshness(s, run, now, threshold):
@@ -342,9 +368,10 @@ def paired_wind_check(s, u, v, level, run, lead, rules, total_cells=None):
 
 
 def bounded_npz(path):
+    path=read_path(path)
     import numpy as np
-    if path.stat().st_size > NPZ_LIMIT: raise ScopeLimit('compressed size')
-    with zipfile.ZipFile(path) as z:
+    if file_stat(path).st_size > NPZ_LIMIT: raise ScopeLimit('compressed size')
+    with open_read(path) as source, zipfile.ZipFile(source) as z:
         entries = z.infolist()
         if len(entries)>12: raise ValueError('archive members')
         if sum(i.file_size for i in entries)>NPZ_LIMIT: raise ScopeLimit('expanded size')
@@ -360,15 +387,15 @@ def bounded_npz(path):
                 if size>NPZ_LIMIT: raise ScopeLimit('array allocation size')
                 if dtype.hasobject or len(shape)>2 or f.tell()+size!=entry.file_size:
                     raise ValueError('bounded array shape')
-    return np.load(path,allow_pickle=False)
+    return load_array(path,allow_pickle=False)
 
 
 def native_array(path, expected_shape):
     import numpy as np
     # Cold drvfs mmap page faults can take seconds per small field. Read bounded
     # native fields sequentially; retain mmap only for genuinely large arrays.
-    size=path.stat().st_size
-    with path.open('rb') as handle:
+    size=file_stat(read_path(path)).st_size
+    with open_read(path) as handle:
         version=np.lib.format.read_magic(handle)
         if version==(1,0):shape,_,dtype=np.lib.format.read_array_header_1_0(handle)
         elif version==(2,0):shape,_,dtype=np.lib.format.read_array_header_2_0(handle)
@@ -377,7 +404,7 @@ def native_array(path, expected_shape):
             raise ValueError('native shape/type')
         if handle.tell()+math.prod(shape)*dtype.itemsize!=size:
             raise ValueError('native byte length')
-    return np.load(path,mmap_mode='r' if size>NPZ_LIMIT else None,allow_pickle=False)
+    return load_array(path,mmap_mode='r' if size>NPZ_LIMIT else None,allow_pickle=False)
 
 
 def validate_frames(s, d, run):
@@ -416,9 +443,9 @@ def native_models(weather, now, rules, deadline, deferred=None):
                 label='部分到报' if missing or d.get('partial') else '已到报',available_frames=len(leads)-len(absent_meta),
                 expected_frames=len(expected),missing_leads=missing,forecast_horizon_hours=end,
                 expected_label='依据本地下载清单检查预报时效，清单外时效暂不评价。',backlog=None)
-            if missing: issue(s,'warning','missing_leads','已发布时效范围内存在缺失预报时效。',run)
+            if missing: issue(s,'warning','missing_leads',f'缺 {len(missing)} 个预报时效：{"、".join(f"+{lead}h" for lead in missing[:8])}{" 等" if len(missing)>8 else ""}。',run)
             if absent_meta: issue(s,'error','committed_metadata_missing',f'目录已提交的 {len(absent_meta)} 个预报帧文件在本地缺失。',run)
-            if d.get('errors'): issue(s,'warning','writer_errors',f'下载目录记录 {len(d["errors"])} 个待重试项目。',run)
+            if d.get('errors'): issue(s,'warning','writer_errors',retry_message(d['errors']),run)
             freshness(s,run,now,18)
             choices=[f for f in frames if f['lead']>0][:2]
             prev_t=None;prev_lead=None
@@ -531,7 +558,7 @@ def wn3_source(weather, now, rules, deadline):
         candidates=[]
         for age in range(24):
             run=(now-timedelta(hours=age)).replace(minute=0,second=0,microsecond=0)
-            p=root/f'run_{run:%Y%m%d%H}.json'
+            p=read_path(root/f'run_{run:%Y%m%d%H}.json')
             if p.exists(): candidates.append((p,run)); break
         if not candidates:
             published=load_json(root/'catalog.json');older_run=stamp(published['run'])
@@ -542,7 +569,7 @@ def wn3_source(weather, now, rules, deadline):
         horizon=d.get('forecast_horizon_hours')
         if type(horizon) is not int or not 1<=horizon<=360: raise ValueError('horizon')
         missing=sorted(set(range(1,horizon+1))-leads)
-        absent_fields=[lead for lead in sorted(leads) if not all((root/directory/f'{run:%Y%m%d%H}'/f'f{lead:03d}_{key}.npz').is_file() for key in ('surface_t','rain1h'))]
+        absent_fields=[lead for lead in sorted(leads) if not all(read_path(root/directory/f'{run:%Y%m%d%H}'/f'f{lead:03d}_{key}.npz').is_file() for key in ('surface_t','rain1h'))]
         missing=sorted(set(missing) | set(absent_fields))
         s['arrival'].update(status='preparing' if d['status']=='preparing' else ('partial' if missing else 'available'),
             label='正在补齐' if d['status']=='preparing' else ('资料尚未齐全' if missing else '已到报'),
@@ -595,6 +622,7 @@ def wn3_source(weather, now, rules, deadline):
             'oldest_run_utc':min((datetime.strptime(r['id'],'%Y%m%d%H').replace(tzinfo=UTC).isoformat() for r in pending),default=None)}
         if short: issue(s,'warning','backfill_short_backlog',f'现有近 7 天补下载队列中有 {len(short)} 个批次的 48 小时检验资料未就绪。')
         if extended: issue(s,'info','backfill_extended_backlog',f'{len(extended)} 个历史批次已有 48 小时检验资料，等待延长到 360 小时；与最新批次到报状态分开统计。')
+    except FileNotFoundError: pass  # this host pulls finished runs and keeps no backfill queue
     except (OSError,ValueError,TypeError,KeyError):
         issue(s,'info','queue_unavailable','补下载队列未读取，无法确定积压数量。')
     return s
@@ -603,6 +631,11 @@ def wn3_source(weather, now, rules, deadline):
 def wn2_source(app, now, rules, deadline):
     import numpy as np
     s=source('weathernext2',WN2); root=app/'cache'
+    if not read_path(root/'weathernext2-prefetch-status.json').exists():
+        # No WN2 downloader has ever written here: this host does not carry WN2, which is not a data fault.
+        s['kind']='reserved'
+        s['arrival'].update(status='reserved',label='未接入',expected_label='本机没有 WN2 下载任务，不检查到报。',backlog=None)
+        return s
     try:
         d=load_json(root/'weathernext2-prefetch-status.json'); run=stamp(d['run_utc'],naive_utc=True)
         end=d.get('target_hours')
@@ -733,7 +766,7 @@ def scan(app=APP, weather=WEATHER, cache=CACHE, now=None):
         c['coverage_label']=f'数值抽查 {c["sampled_files"]} 份要素数据；{c["sampled_cells"]:,}/{c["total_cells"]:,} 个值（只看近期两个预报时间或实况时间）'
         if c['derived_wind_fields']:c['coverage_label']+=f'；另检查 {c["derived_wind_fields"]} 个 u/v 合成风速项'
         if c.get('pressure_wind_layers'):c['coverage_label']+='；高空风已检 '+ '/'.join(c['pressure_wind_layers'])+' hPa'
-        if not c['sampled_files']: issue(s,'info','not_sampled','本次未取得可检查的数值字段，暂不作数值质量结论。')
+        if not c['sampled_files'] and s['kind']=='actual': issue(s,'info','not_sampled','本次未取得可检查的数值字段，暂不作数值质量结论。')
     issues=[row for s in sources for row in s['issues']]
     summary={'sources':len(sources),'issues':len(issues),
         'error':sum(i['severity']=='error' for i in issues),'warning':sum(i['severity']=='warning' for i in issues),
@@ -768,6 +801,66 @@ def scan(app=APP, weather=WEATHER, cache=CACHE, now=None):
     return report
 
 
+def record_history(cache, report):
+    """Per-run arrival log built from successive scans, so the page can show the last 7 days."""
+    path=cache/'history.json'
+    try:
+        history=load_json(path)
+        if history.get('schema')!=1 or not isinstance(history.get('sources'),dict): raise ValueError('schema')
+    except (OSError,ValueError): history={'schema':1,'since_utc':report['generated_utc'],'sources':{}}
+    seen=report['generated_utc']; cutoff=stamp(seen)-timedelta(days=HISTORY_DAYS)
+    for s in report['sources']:
+        a=s.get('arrival',{}); run=a.get('latest_run_utc')
+        if s.get('kind')!='actual' or not run: continue
+        rows=history['sources'].get(s['id'])
+        rows=history['sources'][s['id']]=[r for r in rows if isinstance(r,dict) and isinstance(r.get('run_utc'),str)] if isinstance(rows,list) else []
+        row=next((r for r in rows if r.get('run_utc')==run),None)
+        if row is None:
+            # A source's first record was on disk before logging began, so its arrival time is unknown.
+            row={'run_utc':run,'first_seen_utc':seen,'complete_utc':None,'baseline':not rows}
+            rows.append(row)
+        available,expected=a.get('available_frames'),a.get('expected_frames')
+        # 'delayed' only says the run is old; whether it is complete then depends on the frame count.
+        if a.get('status')=='delayed': complete=type(available) is int and type(expected) is int and available>=expected>0
+        else: complete=a.get('status') in ('available','complete')
+        row.update(available=available if type(available) is int else None,
+                   expected=expected if type(expected) is int else None,last_seen_utc=seen)
+        if complete and not row.get('complete_utc'): row['complete_utc']=seen
+        rows[:]=sorted((r for r in rows if stamp(r['run_utc'])>=cutoff),key=lambda r:r['run_utc'])
+    atomic_json(path,history)
+
+
+def history_view(now=None):
+    """Compact view of the arrival log: seven Beijing days per source plus its latest runs."""
+    try:
+        history=load_json(CACHE/'history.json'); since=stamp(history['since_utc']); logged=history['sources'].items()
+    except (OSError,ValueError,KeyError,TypeError,AttributeError): return None
+    today=(now or datetime.now(UTC)).astimezone(BJT).date()
+    view={}
+    for id,rows in logged:
+        runs=[]
+        for r in rows if isinstance(rows,list) else []:
+            try: runs.append((stamp(r['run_utc']),stamp(r['complete_utc']) if r.get('complete_utc') else None,r))
+            except (ValueError,KeyError,TypeError): continue
+        days={today-timedelta(days=n):{'runs':0,'complete':0,'pending':0,'lags':[]} for n in range(6,-1,-1)}
+        recent=[]
+        for index,(run,done,r) in enumerate(runs):
+            latest=index==len(runs)-1
+            lag=None if done is None or r.get('baseline') else round((done-run).total_seconds()/3600,1)
+            day=days.get(run.astimezone(BJT).date())
+            if day is not None:
+                day['runs']+=1
+                if done: day['complete']+=1
+                elif latest: day['pending']+=1  # still downloading, not yet a miss
+                if lag is not None: day['lags'].append(lag)
+            recent.append({**times(run,'run'),**(times(done,'complete') if done else {}),'lag_hours':lag,
+                'available':r.get('available'),'expected':r.get('expected'),'baseline':bool(r.get('baseline')),'latest':latest})
+        view[id]={'days':[{'date':d.isoformat(),'runs':v['runs'],'complete':v['complete'],'pending':v['pending'],
+                           'median_lag_hours':round(statistics.median(v['lags']),1) if v['lags'] else None} for d,v in days.items()],
+                  'recent':recent[::-1][:6]}
+    return {**times(since,'since'),'sources':view}
+
+
 def _read_snapshot():
     try:
         value=load_json(CACHE/'snapshot.json')
@@ -793,7 +886,7 @@ def status():
         state='running' if running else ('failed' if _job.get('status')=='failed' else ('ready' if snapshot else 'idle'))
         stale=bool(snapshot) and (snapshot.get('rule_revision')!=RULE_REVISION or (datetime.now(UTC)-stamp(snapshot['generated_utc'])).total_seconds()>TTL)
         return {'schema':1,'state':state,'snapshot':snapshot,'stale':stale,'ttl_seconds':TTL,
-                'job':{k:v for k,v in _job.items() if not k.startswith('_')}}
+                'history':history_view(),'job':{k:v for k,v in _job.items() if not k.startswith('_')}}
 
 
 def refresh():
@@ -828,4 +921,7 @@ if __name__=='__main__':
         try: os.nice(10)
         except OSError: pass
         report=scan();atomic_json(output,report)
+        # The arrival log is an extra: a damaged log must not cost the page its fresh report.
+        try: record_history(output.parent,report)
+        except (OSError,ValueError,TypeError,KeyError): pass
         print(json.dumps(report['summary'],ensure_ascii=False))

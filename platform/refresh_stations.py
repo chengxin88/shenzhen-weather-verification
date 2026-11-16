@@ -49,9 +49,11 @@ def main():
                 # Freeze a version in the cache. Updating the reviewed repo table
                 # remains an explicit builder operation, not a timer side effect.
                 table = build(output=root / 'stations.json')
-                status['errors'] += iem(client, root, table['stations'],
+                # Inactive stations stay in the source requests so they can return.
+                requested = table['stations'] + table.get('inactive', [])
+                status['errors'] += iem(client, root, requested,
                                         end - timedelta(days=args.backfill) if args.backfill else end - timedelta(hours=26), end)
-                status['errors'] += ghcnh(client, root / 'raw', table['stations'])
+                status['errors'] += ghcnh(client, root / 'raw', requested)
                 status['fetch_seconds'] = round(time.monotonic()-fetch_started,3)
                 print('TIMING fetch',status['fetch_seconds'],'seconds',flush=True)
             else:

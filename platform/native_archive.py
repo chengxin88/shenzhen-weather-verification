@@ -10,10 +10,15 @@ No downloads, no extrapolation, no reconstruction of absent rain intervals.
 """
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
+from wn3_storage import logical_path, file_stat, read_text, open_read, load_array, read_path, union_glob
+
 import hashlib,json,os,re,time,math,zipfile
 import sys
-if '/home/chengyang/gods-eye-weather/weather_backend' not in sys.path:sys.path.append('/home/chengyang/gods-eye-weather/weather_backend')
+if '/home/yjzx/verification-platform/gods-eye-weather/weather_backend' not in sys.path:sys.path.append(str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
 from global_store import field_directory
+import guifan_scores as guifan
 import numpy as np
 import pandas as pd
 from scipy.interpolate import RegularGridInterpolator
@@ -27,7 +32,7 @@ AI_FRAME_MODELS={'aifs':'ECMWF-AIFS','aigfs':'NCEP-AIGFS','gefs':'GEFS集合平�
 WN3_MODEL='Google WeatherNext 3（集合均值）'
 WN3_SIGNATURE='wn3-native-mean-v1'
 NATIVE_MODELS=tuple(MODELS.values())+tuple(AI_MODELS.values())+(WN3_MODEL,)
-NATIVE_LEADS=tuple(range(169))
+NATIVE_LEADS=tuple(range(241))
 WN3_SOURCES={
     'native-score-v1':('weathernext3-native-score-v1',(108.,18.,120.,27.)),
     'native-southern-china-v1':('weathernext3-native-southern-china-v1',(100.,10.,130.,35.)),
@@ -35,9 +40,16 @@ WN3_SOURCES={
     'native-china-v1':('weathernext3-native-china-v1',(60.,0.,150.,60.)),
 }
 WN3_FIELDS={'surface_t':('temperature_2m_mean','degC'),
+            # WN3's station-calibrated 2 m temperature, on its own 0.05 degree grid.
+            'station_t':('station_head_temperature_2m_mean','degC'),
+            'surface_td':('dewpoint_temperature_2m_mean','degC'),
+            'surface_msl':('mean_sea_level_pressure_mean','hPa'),
+            'surface_u':('u_component_of_wind_10m_mean','m/s'),
+            'surface_ws':('wind_speed_10m_mean','m/s'),
+            'surface_v':('v_component_of_wind_10m_mean','m/s'),
             'rain1h':('total_precipitation_1hr_mean','mm')}
 WN3_ERRORS=(ValueError,KeyError,TypeError,OSError,EOFError,zipfile.BadZipFile)
-THRESHOLDS=[.1,1,3,10,20,30,50]
+THRESHOLDS=[.1,1,3,5,10,20,30,50]
 AI_RAIN_THRESHOLDS={6:[.1,1,5,10,25,50,100],12:[.1,1,5,10,25,50,100],24:[.1,10,25,50,100,250]}
 GLOBAL_STORAGE={'ecmwf':'ecmwf-global-v1','gfs':'gfs-global-v1','aifs':'aifs-global-v1','aigfs':'aigfs-global-v1','gefs':'gefs-global-v1'}
 BOX=(110.0,119.0,19.0,26.0)  # lon0,lon1,lat0,lat1: Shenzhen plus margin
@@ -49,7 +61,7 @@ def load_global(p,slug,metadata=None):
     if d.get('storage') not in (GLOBAL_STORAGE[slug],slug+'-regional-v1') or d.get('native_grid_degrees')!=0.25:
         raise ValueError('本地全球归档元数据不匹配')
     x=np.asarray(d['lon'],float);y=np.asarray(d['lat'],float)
-    expected=((49,37) if d.get('bounds')==[108.,18.,120.,27.] else (361,241)) if d['storage'].endswith('-regional-v1') else (1441,721)
+    expected=({(108.,18.,120.,27.):(49,37),(104.,18.,121.,27.):(69,37),(97.,18.,123.,33.):(105,61)}.get(tuple(d.get('bounds') or ()),(361,241))) if d['storage'].endswith('-regional-v1') else (1441,721)
     if (len(x),len(y))!=expected or not np.allclose(np.diff(x),.25) or not np.allclose(np.diff(y),.25) or x[0]>BOX[0] or x[-1]<BOX[1] or y[0]>BOX[2] or y[-1]<BOX[3]:raise ValueError('本地区域归档网格不匹配')
     xi=np.flatnonzero((x>=BOX[0])&(x<=BOX[1]));yi=np.flatnonzero((y>=BOX[2])&(y<=BOX[3]))
     fields=field_directory(p,d)
@@ -73,7 +85,7 @@ def source_signature(p,is_global,obs_path):
         for name in ('surface_t','rain3h'):
             f=field_directory(p)/(name+'.npy')
             sig.append(f.stat().st_mtime_ns if f.is_file() else 0)
-    return sig+[obs_path.stat().st_mtime_ns]
+    return sig+[obs_path.stat().st_mtime_ns,guifan.REVISION]
 
 def stamp(s):return datetime.fromisoformat(s.replace('Z','+00:00'))
 
@@ -88,10 +100,11 @@ def validate_frame(d,model,run,lead):
 
 def wn3_manifest(path):
     """Admit only committed native ensemble-mean frames, never display JSON fields."""
+    path=read_path(path)
     match=re.fullmatch(r'run_(\d{10})\.json',path.name)
     if not match:raise ValueError('WN3起报文件名不匹配')
     run=datetime.strptime(match[1],'%Y%m%d%H').replace(tzinfo=timezone.utc)
-    data=json.loads(path.read_text())
+    data=json.loads(read_text(path))
     if not isinstance(data,dict):raise ValueError('WN3区域目录格式不匹配')
     directory=data.get('native_cache_directory')
     if directory not in WN3_SOURCES:raise ValueError('WN3非已验证区域原生缓存')
@@ -115,17 +128,18 @@ def wn3_paths(root,run,lead,directory,committed):
     """The manifest commits each complete forecast hour; absent hours stay absent."""
     run_id=run.strftime('%Y%m%d%H')
     keys=[(lead,'surface_t')]+[(hour,'rain1h') for hour in range(lead-2,lead+1)]
-    return {(hour,key):root/directory/run_id/f'f{hour:03}_{key}.npz'
+    return {(hour,key):read_path(root/directory/run_id/f'f{hour:03}_{key}.npz')
             for hour,key in keys if hour in committed}
 
 def wn3_source_signature(paths,obs_path,reference_signature):
     files=[]
     for (lead,key),path in sorted(paths.items()):
-        if not path.is_file():
+        try: stat=file_stat(read_path(path))
+        except FileNotFoundError:
             files.append([lead,key,None]);continue
-        stat=path.stat();metadata=None
+        metadata=None
         try:
-            with np.load(path,allow_pickle=False) as data:
+            with load_array(path,allow_pickle=False) as data:
                 # Metadata participates in invalidation; validation happens before scoring.
                 raw=str(data['meta'].item())
             metadata=hashlib.sha256(raw.encode()).hexdigest()
@@ -133,27 +147,28 @@ def wn3_source_signature(paths,obs_path,reference_signature):
             metadata='invalid'
         files.append([lead,key,stat.st_mtime_ns,stat.st_size,metadata])
     obs=obs_path.stat()
-    return {'adapter':WN3_SIGNATURE,'files':files,
+    return {'guifan':guifan.REVISION,'adapter':WN3_SIGNATURE,'files':files,
             'observation':[obs.st_mtime_ns,obs.st_size],'reference':reference_signature}
 
 def load_wn3_field(path,run,lead,key,directory):
     """Validate converted native axes, identity, units and mean provenance, offline."""
+    path=read_path(path)
     schema,bounds=WN3_SOURCES[directory]
-    variable,unit=WN3_FIELDS[key]
-    with np.load(path,allow_pickle=False) as data:
+    variable,unit=WN3_FIELDS[key];per_degree=20 if key=='station_t' else 10
+    with load_array(path,allow_pickle=False) as data:
         meta=json.loads(str(data['meta'].item()))
         x,y,a=data['lon'],data['lat'],data['values']
     if not isinstance(meta,dict):raise ValueError('WN3字段元数据格式不匹配')
     if (meta.get('schema')!=schema or stamp(meta['run'])!=run or type(meta.get('lead')) is not int
         or meta['lead']!=lead or stamp(meta['valid'])!=run+timedelta(hours=lead)
         or meta.get('field')!=key or meta.get('source_variable')!=variable
-        or meta.get('unit')!=unit or meta.get('grid_degrees')!=.1
+        or meta.get('unit')!=unit or meta.get('grid_degrees')!=1/per_degree
         or meta.get('bounds')!=list(bounds) or meta.get('statistic')!='mean'
         or meta.get('source_kind') not in ('earth-engine-region','existing-gcs-offline-cache')
         or not re.fullmatch(r'[0-9a-f]{64}',str(meta.get('source_sha256','')))):
         raise ValueError('WN3原生字段身份或来源不匹配')
-    expected_x=np.arange(round(bounds[0]*10),round(bounds[2]*10)+1)/10
-    expected_y=np.arange(round(bounds[1]*10),round(bounds[3]*10)+1)/10
+    expected_x=np.arange(round(bounds[0]*per_degree),round(bounds[2]*per_degree)+1)/per_degree
+    expected_y=np.arange(round(bounds[1]*per_degree),round(bounds[3]*per_degree)+1)/per_degree
     if (x.shape!=expected_x.shape or y.shape!=expected_y.shape
         or not np.allclose(x,expected_x,atol=1e-7,rtol=0)
         or not np.allclose(y,expected_y,atol=1e-7,rtol=0)
@@ -161,8 +176,14 @@ def load_wn3_field(path,run,lead,key,directory):
         raise ValueError('WN3原生网格或字段不完整')
     if key=='rain1h' and (np.min(a)<0 or np.max(a)>1000):
         raise ValueError('WN3小时降水单位或范围不匹配')
-    if key=='surface_t' and (np.min(a)<-100 or np.max(a)>80):
+    if key in ('surface_t','surface_td','station_t') and (np.min(a)<-100 or np.max(a)>80):
         raise ValueError('WN3摄氏气温单位或范围不匹配')
+    if key=='surface_msl' and (np.min(a)<500 or np.max(a)>1150):
+        raise ValueError('WN3海平面气压单位或范围不匹配')
+    if key=='surface_ws' and (np.min(a)<0 or np.max(a)>150):
+        raise ValueError('WN3风速单位或范围不匹配')
+    if key in ('surface_u','surface_v') and (np.min(a)<-150 or np.max(a)>150):
+        raise ValueError('WN3风场分量单位或范围不匹配')
     xi=np.flatnonzero((x>=BOX[0])&(x<=BOX[1]));yi=np.flatnonzero((y>=BOX[2])&(y<=BOX[3]))
     if len(xi)<2 or len(yi)<2:raise ValueError('WN3原生区域未覆盖检验范围')
     return x[xi],y[yi],np.asarray(a[np.ix_(yi,xi)],float)
@@ -229,14 +250,22 @@ def score_frame(d,grid,obs,created):
         if not len(fc):continue
         row=dict(base,dataset='hk-'+kind+('-3' if kind=='降水' else '-2m'),n=len(fc))
         if kind=='降水':
-            for threshold in THRESHOLDS:
-                f=fc>=threshold;o=ob>=threshold
-                rows.append(dict(row,threshold=threshold,H=int((f&o).sum()),M=int((~f&o).sum()),F=int((f&~o).sum())))
+            rows.extend(guifan.rain_rows(row,fc,ob,3))
         else:
             delta=fc-ob
             cc=float(np.corrcoef(fc,ob)[0,1]) if np.std(fc)>1e-12 and np.std(ob)>1e-12 else None
-            rows.append(dict(row,threshold=None,ME=float(delta.mean()),MAE=float(np.abs(delta).mean()),RMSE=float(np.sqrt((delta*delta).mean())),CC=cc))
+            rows.append(dict(row,threshold=None,**guifan.accuracy(fc,ob),ME=float(delta.mean()),MAE=float(np.abs(delta).mean()),RMSE=float(np.sqrt((delta*delta).mean())),CC=cc))
     return rows
+
+def score_wn3_rain1h(path,run,lead,directory,grid,obs,created):
+    """One forecast hour against RAIN01H; both cover exactly (valid-1h, valid]."""
+    x,y,field=load_wn3_field(path,run,lead,'rain1h',directory)
+    valid=run+timedelta(hours=lead)
+    fc,ob=paired(dict(lon=x,lat=y),field,grid,obs,'降水','RAIN01H')
+    if not len(fc):return []
+    row=dict(model=WN3_MODEL,run=run.astimezone(BJT).isoformat()[:19],valid=valid.astimezone(BJT).isoformat()[:19],
+             lead=lead,created=created,dataset='hk-降水-1',n=len(fc))
+    return guifan.rain_rows(row,fc,ob,1)
 
 def score_ai_rain(frames,grid,obs,acc,created):
     """Sum consecutive 6 h AI rain fields of one run; obs already holds the matching summed observation."""
@@ -244,11 +273,7 @@ def score_ai_rain(frames,grid,obs,acc,created):
     base=dict(model=d['model'],run=run.astimezone(BJT).isoformat()[:19],valid=valid.astimezone(BJT).isoformat()[:19],lead=d['lead'],created=created,dataset=f'hk-降水-{acc}')
     fc,ob=paired(d,np.sum([np.asarray(f['rain6h'],float) for f in frames],axis=0),grid,obs,'降水','RAINACC')
     if not len(fc):return []
-    rows=[]
-    for threshold in AI_RAIN_THRESHOLDS[acc]:
-        f=fc>=threshold;o=ob>=threshold
-        rows.append(dict(base,n=len(fc),threshold=threshold,H=int((f&o).sum()),M=int((~f&o).sum()),F=int((f&~o).sum())))
-    return rows
+    return guifan.rain_rows(base,fc,ob,acc)
 
 def ai_rain_windows(found,memo,updated,rows,issues,grid,total_grid):
     # AI frames carry 6 h rain only: 6/12/24 h totals are sums of consecutive 6 h fields of one
@@ -276,7 +301,7 @@ def ai_rain_windows(found,memo,updated,rows,issues,grid,total_grid):
             parts=[found.get((slug,run,l)) for l in leads]
             if lead%6 or leads[0]<6 or any(x is None or not x[5] for x in parts):continue
             key=f'{parts[-1][0]}::rain{acc}h'
-            sig=[[mtime(x[0]),mtime(field_directory(x[0])/'rain6h.npy'),mtime(x[4])] for x in parts]
+            sig=[guifan.REVISION,[[mtime(x[0]),mtime(field_directory(x[0])/'rain6h.npy'),mtime(x[4])] for x in parts]]
             saved=memo.get(key)
             if saved and saved['signature']==sig:
                 updated[key]=saved;rows.extend(saved['rows']);continue
@@ -295,8 +320,8 @@ def ai_rain_windows(found,memo,updated,rows,issues,grid,total_grid):
 
 def build_native(app,weather,cache):
     app=Path(app);weather=Path(weather);cache=Path(cache)
-    signature='hk-native-025-v1'
-    try:old=json.loads(cache.read_text());old=old if old.get('version')==signature else {}
+    signature='hk-native-025-v1+'+guifan.REVISION
+    try:old=json.loads(cache.read_text())
     except (OSError,ValueError):old={}
     memo=old.get('files',{});updated={};rows=[];issues=[]
     # Match the source grid's column conventions without importing Streamlit.
@@ -308,8 +333,8 @@ def build_native(app,weather,cache):
     city=unary_union([shape(f['geometry']) for f in json.loads((app/'data/shenzhen_streets.geojson').read_text())['features']])
     total_grid=grid['GRIDID'].nunique()
     grid=grid.loc[[city.covers(Point(float(x),float(y))) for x,y in zip(grid.lon,grid.lat)]].copy()
-    found={};now=datetime.now(timezone.utc);cutoff=now-timedelta(days=WINDOW_DAYS)
-    here=Path(__file__).resolve().parent
+    found={};now=stamp(os.environ['GUIFAN_SCORE_END']) if os.environ.get('GUIFAN_SCORE_END') else datetime.now(timezone.utc);cutoff=now-timedelta(days=WINDOW_DAYS)
+    here=Path(os.environ.get('NATIVE_AUX_ROOT',str(Path(__file__).resolve().parent)))
     # Main-platform files first; TEST-only backfill (cache/native-backfill) fills older runs.
     roots=[(weather/'region-v4',False),(here/'cache'/'native-backfill',True)]
     obs_roots=[app/'cache/OBSERVATION/grid',here/'cache'/'obs-backfill'/'grid']
@@ -353,7 +378,7 @@ def build_native(app,weather,cache):
         info=path.stat();reference_signature.append([info.st_mtime_ns,info.st_size])
     wn3_root=weather/'region-v4'/'weathernext3'
     attempted_wn3=set();invalid_wn3_runs=set();committed_wn3={}
-    for manifest in sorted(wn3_root.glob('run_??????????.json')):
+    for manifest in sorted(union_glob(wn3_root,'run_??????????.json')):
         try:run,directory,committed=wn3_manifest(manifest)
         except WN3_ERRORS:
             # A present invalid catalog must not resurrect an earlier cached score.
@@ -371,7 +396,28 @@ def build_native(app,weather,cache):
             obs_path=next((r/name for r in obs_roots if (r/name).is_file()),None)
             if obs_path is None:continue
             key=WN3_SIGNATURE+':'+str(manifest)+f':f{lead:03}'
-            attempted_wn3.add((WN3_MODEL,run.astimezone(BJT).isoformat()[:19],lead))
+            # Missing source files are pruning, not a failed validation.
+            try:
+                available_paths=wn3_paths(wn3_root,run,lead,directory,committed)
+                if all(file_stat(p) for p in available_paths.values()):attempted_wn3.add((WN3_MODEL,run.astimezone(BJT).isoformat()[:19],lead))
+            except FileNotFoundError:pass
+            # Own memo entry, so adding 1 h leaves every cached 3 h and temperature score untouched.
+            hour_key=WN3_SIGNATURE+':1h:'+str(manifest)+f':f{lead:03}'
+            try:
+                hour_path=wn3_paths(wn3_root,run,lead,directory,committed).get((lead,'rain1h'))
+                if hour_path is not None:
+                    sig=wn3_source_signature({(lead,'rain1h'):hour_path},obs_path,reference_signature)
+                    saved=memo.get(hour_key)
+                    if saved and saved.get('signature')==sig:
+                        updated[hour_key]=saved;rows.extend(saved['rows'])
+                    else:
+                        obs=pd.read_pickle(obs_path)
+                        if 'RAIN01H' in obs and obs['GRIDID'].nunique()>=math.ceil(total_grid*.95):
+                            result=score_wn3_rain1h(hour_path,run,lead,directory,grid,obs,time.time())
+                            updated[hour_key]={'signature':sig,'rows':result};rows.extend(result)
+            except WN3_ERRORS:
+                issues.append({'model':WN3_MODEL,'run':run.isoformat(),'lead':lead,
+                    'reason':'WN3小时降水原生字段或观测不完整，未生成1小时评分'})
             try:
                 paths=wn3_paths(wn3_root,run,lead,directory,committed)
                 sig=wn3_source_signature(paths,obs_path,reference_signature)
@@ -416,19 +462,19 @@ def build_native(app,weather,cache):
     cache.parent.mkdir(parents=True,exist_ok=True)
     temp=cache.with_suffix('.tmp');temp.write_text(json.dumps({'version':signature,'files':updated},ensure_ascii=False,allow_nan=False));os.replace(temp,cache)
     datasets=[]
-    for kind,acc in [('降水',3),('降水',6),('降水',12),('降水',24),('气温',None)]:
+    for kind,acc in [('降水',1),('降水',3),('降水',6),('降水',12),('降水',24),('气温',None)]:
         items=[r for r in rows if r['dataset']==('hk-降水-%d'%acc if kind=='降水' else 'hk-气温-2m')]
         if not items:continue
         datasets.append(dict(id=items[0]['dataset'],kind=kind,source='hk',accumulation=acc,level=None,
-            has_n=True,models=[m for m in NATIVE_MODELS if any(r['model']==m for r in items)],supported_models=[m for m in NATIVE_MODELS if kind=='气温' or (m in AI_MODELS.values())==(acc!=3)],
-            start=min(r['valid'] for r in items),end=max(r['valid'] for r in items),leads=sorted({r['lead'] for r in items}),thresholds=(THRESHOLDS if acc==3 else AI_RAIN_THRESHOLDS[acc]) if kind=='降水' else [],times=sorted({r['valid'] for r in items}),
+            has_n=True,models=[m for m in NATIVE_MODELS if any(r['model']==m for r in items)],supported_models=[m for m in NATIVE_MODELS if kind=='气温' or (m==WN3_MODEL if acc==1 else (m in AI_MODELS.values())==(acc!=3))],
+            start=min(r['valid'] for r in items),end=max(r['valid'] for r in items),leads=sorted({r['lead'] for r in items}),thresholds=guifan.THRESHOLDS[acc] if kind=='降水' else [],**guifan.metadata('t' if kind=='气温' else None,acc),times=sorted({r['valid'] for r in items}),
             reference='深圳开放数据格点分析场',region='深圳市行政区域',updated=datetime.fromtimestamp(max(r['created'] for r in items),BJT).isoformat(),
             model_sources={
                 **{m:dict(grid_degrees=.25,statistic='deterministic',note='本地EC/GFS原生0.25°归档，数值约三位小数') for m in MODELS.values()},
                 **{m:dict(grid_degrees=.25,statistic='deterministic',note='本地AIFS/AIGFS原生0.25°归档，每6小时一帧；评2米气温及6/12/24小时累计降水') for m in AI_MODELS.values()},
                 'GEFS集合平均':dict(grid_degrees=.25,statistic='mean',note='NOAA GEFS集合平均（geavg，0.25°），每6小时一帧；评2米气温及6/12/24小时累计降水，均值产品会平滑极端量值'),
                 WN3_MODEL:dict(grid_degrees=.1,statistic='mean',fields=['surface_t','rain1h'],
-                    note='官方常规2米气温及小时降水集合均值；3小时降水由末端三份完整小时场相加，只读本机原生NPZ缓存')},
+                    note='官方常规2米气温及小时降水集合均值；1小时降水直接取对应小时场，3小时降水由末端三份完整小时场相加，只读本机原生NPZ缓存')},
             source_note=('ECAI/GFSAI/GEFS集合平均为本地0.25°归档（AIFS/AIGFS/NOAA GEFS），6/12/24小时累计降水由同一起报连续的6小时降水场逐段相加，实况同样由逐6小时实况相加，缺任一段不评分；降水最近邻插值到深圳市域格点。各模式可用日期和起报不同，比较时请选择共同有效时次。' if kind=='降水' and acc!=3 else 'EC/GFS为本地0.25°归档（早期为香港同步文件，之后为本机全球0.25°场），数值约三位小数；WeatherNext 3为已验证本机0.1°常规气温/降水集合均值原生NPZ缓存。WN3的3小时降水严格相加末端三个完整小时场，缺任一小时不评分。降水最近邻、气温双线性插值到深圳市域格点；均值产品会平滑极端量值，各模式可用日期和起报不同，比较时请选择共同有效时次。')))
     return datasets,rows,issues
 
@@ -475,6 +521,7 @@ def cached_native(app,weather,cache):
 
 if __name__=='__main__':
     import sys
-    out=build_native('/home/chengyang/ec-gfs-server','/home/chengyang/gods-eye-weather/weather-data',Path(__file__).parent/'native-scores.json')
-    Path(__file__).with_name('native-catalog.json').write_text(json.dumps({'datasets':out[0],'rows':out[1],'issues':out[2]},ensure_ascii=False,allow_nan=False))
+    cache=Path(os.environ.get('NATIVE_SCORES_PATH',str(Path(__file__).parent/'native-scores.json')))
+    out=build_native(os.environ.get('VERIFICATION_APP_ROOT','/home/yjzx/verification-platform/ec-gfs-server'),os.environ.get('NATIVE_WEATHER_ROOT','/home/yjzx/verification-platform/gods-eye-weather/weather-data'),cache)
+    cache.with_name('native-catalog.json').write_text(json.dumps({'datasets':out[0],'rows':out[1],'issues':out[2]},ensure_ascii=False,allow_nan=False))
     print(json.dumps({'datasets':[{'id':d['id'],'models':d['models'],'start':d['start'],'end':d['end']} for d in out[0]],'rows':len(out[1]),'issues':len(out[2])},ensure_ascii=False))

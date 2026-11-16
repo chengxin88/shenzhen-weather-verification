@@ -1,0 +1,29 @@
+{
+  "offline_files": 15,
+  "exit_code": 0,
+  "elapsed_seconds": 4.4,
+  "live_case_integration": {
+    "file": "test_case_page_frontend.js",
+    "status": "unavailable",
+    "origin": "http://127.0.0.1:8543/Verification/test/",
+    "probe": "ConnectionRefusedError: [Errno 111] Connection refused",
+    "reason": "requires a real local replay API; this file loads only unchanged case_cache.js and case.js"
+  },
+  "files": [
+    "test_available_models.js",
+    "test_demo_core.js",
+    "test_detail_redesign.js",
+    "test_grid_stations_frontend.js",
+    "test_guifan_frontend.js",
+    "test_initial_kind_switch.js",
+    "test_nmic_window_frontend.js",
+    "test_nowcast_frontend.js",
+    "test_overview_frontend.js",
+    "test_quality_frontend.js",
+    "test_slim_core.js",
+    "test_station_selection.js",
+    "test_station_systems.js",
+    "test_stations_frontend.js",
+    "test_surface_stations.js"
+  ]
+}

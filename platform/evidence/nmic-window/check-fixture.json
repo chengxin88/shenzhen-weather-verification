@@ -1,0 +1,142 @@
+{
+  "cache": "<temporary fixture; removed>",
+  "generation": "20261111T000000",
+  "window_end": "2026-11-11T00:00:00Z",
+  "nmic_end": "2026-11-08T18:00:00Z",
+  "regions": {
+    "all": {
+      "nmic_majority": false,
+      "effective_window_end": "2026-11-11T00:00:00Z"
+    },
+    "hn": {
+      "nmic_majority": true,
+      "effective_window_end": "2026-11-08T18:00:00Z"
+    },
+    "gba": {
+      "nmic_majority": true,
+      "effective_window_end": "2026-11-08T18:00:00Z"
+    },
+    "hk": {
+      "nmic_majority": false,
+      "effective_window_end": "2026-11-11T00:00:00Z"
+    },
+    "sz": {
+      "nmic_majority": false,
+      "effective_window_end": "2026-11-11T00:00:00Z"
+    },
+    "xj": {
+      "nmic_majority": true,
+      "effective_window_end": "2026-11-08T18:00:00Z"
+    }
+  },
+  "overview": [
+    {
+      "region": "hn",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "window_start": "2026-11-05T18:00:00Z",
+      "window_end": "2026-11-08T18:00:00Z",
+      "start": "2026-11-06T02:00:00",
+      "end": "2026-11-09T02:00:00",
+      "station_count": 5,
+      "data_end_reason": "nmic"
+    },
+    {
+      "region": "hn",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "window_start": "2026-11-01T18:00:00Z",
+      "window_end": "2026-11-08T18:00:00Z",
+      "start": "2026-11-02T02:00:00",
+      "end": "2026-11-09T02:00:00",
+      "station_count": 5,
+      "data_end_reason": "nmic"
+    },
+    {
+      "region": "hn",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "window_start": "2026-10-09T18:00:00Z",
+      "window_end": "2026-11-08T18:00:00Z",
+      "start": "2026-10-10T02:00:00",
+      "end": "2026-11-09T02:00:00",
+      "station_count": 5,
+      "data_end_reason": "nmic"
+    },
+    {
+      "region": "gba",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "window_start": "2026-11-05T18:00:00Z",
+      "window_end": "2026-11-08T18:00:00Z",
+      "start": "2026-11-06T02:00:00",
+      "end": "2026-11-09T02:00:00",
+      "station_count": 5,
+      "data_end_reason": "nmic"
+    },
+    {
+      "region": "gba",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "window_start": "2026-11-01T18:00:00Z",
+      "window_end": "2026-11-08T18:00:00Z",
+      "start": "2026-11-02T02:00:00",
+      "end": "2026-11-09T02:00:00",
+      "station_count": 5,
+      "data_end_reason": "nmic"
+    },
+    {
+      "region": "gba",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "window_start": "2026-10-09T18:00:00Z",
+      "window_end": "2026-11-08T18:00:00Z",
+      "start": "2026-10-10T02:00:00",
+      "end": "2026-11-09T02:00:00",
+      "station_count": 5,
+      "data_end_reason": "nmic"
+    },
+    {
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "window_start": "2026-11-08T00:00:00Z",
+      "window_end": "2026-11-11T00:00:00Z",
+      "start": "2026-11-08T08:00:00",
+      "end": "2026-11-11T08:00:00",
+      "station_count": 10,
+      "data_end_reason": null
+    },
+    {
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "window_start": "2026-11-04T00:00:00Z",
+      "window_end": "2026-11-11T00:00:00Z",
+      "start": "2026-11-04T08:00:00",
+      "end": "2026-11-11T08:00:00",
+      "station_count": 10,
+      "data_end_reason": null
+    },
+    {
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "window_start": "2026-10-12T00:00:00Z",
+      "window_end": "2026-11-11T00:00:00Z",
+      "start": "2026-10-12T08:00:00",
+      "end": "2026-11-11T08:00:00",
+      "station_count": 10,
+      "data_end_reason": null
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+[
+  {
+    "kind": "降水",
+    "hours": 6,
+    "case": "2026-07-25",
+    "runs": [
+      "2026072500"
+    ],
+    "models": [
+      "cma1",
+      "cma3ec",
+      "cma3ggf",
+      "cma3ggfmt",
+      "cma9",
+      "pangu",
+      "zhiji",
+      "feed"
+    ],
+    "window": 0,
+    "thresholds": [
+      0.1,
+      10,
+      25,
+      50
+    ],
+    "fields": [
+      "rain"
+    ],
+    "levels": [
+      "surface"
+    ],
+    "source": "sz-open-data-v1",
+    "spacing": 0.03,
+    "common": true
+  },
+  {
+    "kind": "降水",
+    "hours": 6,
+    "case": "2026-07-25",
+    "runs": [
+      "2026072500",
+      "2026072512"
+    ],
+    "models": [
+      "cma1",
+      "cma3ec",
+      "cma3ggf",
+      "cma3ggfmt",
+      "cma9",
+      "pangu",
+      "zhiji",
+      "feed"
+    ],
+    "window": 0,
+    "thresholds": [
+      0.1,
+      10,
+      25,
+      50
+    ],
+    "fields": [
+      "rain"
+    ],
+    "levels": [
+      "surface"
+    ],
+    "source": "sz-open-data-v1",
+    "spacing": 0.03,
+    "common": true
+  },
+  {
+    "kind": "2米气温",
+    "hours": 0,
+    "case": "2026-07-25",
+    "runs": [
+      "2026072500"
+    ],
+    "models": [
+      "cma1",
+      "cma3ec",
+      "cma3ggf",
+      "cma3ggfmt",
+      "cma9",
+      "pangu",
+      "zhiji"
+    ],
+    "window": 0,
+    "thresholds": [],
+    "fields": [
+      "t"
+    ],
+    "levels": [
+      "surface"
+    ],
+    "source": "sz-open-data-v1",
+    "spacing": 0.03,
+    "common": true
+  }
+]

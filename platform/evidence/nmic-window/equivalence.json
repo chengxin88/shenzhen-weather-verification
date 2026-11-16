@@ -1,0 +1,728 @@
+{
+  "baseline": "dc7b05b",
+  "baseline_api_blob": "cf06b7c38a0f7541495c1be3aeb9d31c2aec02b0",
+  "comparisons": 90,
+  "all_values_and_serialized_bytes_equal": true,
+  "cases": [
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "rain",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "all",
+      "element": "t",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "rain",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "hk",
+      "element": "t",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "rain",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "sz",
+      "element": "t",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "rain",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "sqlite",
+      "region": "xj",
+      "element": "t",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "rain",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 1,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 1,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 1,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 2,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 2,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 2,
+      "days": 30,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 3,
+      "days": 3,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 3,
+      "days": 7,
+      "equal": true
+    },
+    {
+      "mode": "persisted_scores",
+      "region": "all",
+      "element": "t",
+      "day": 3,
+      "days": 30,
+      "equal": true
+    }
+  ]
+}

@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/home/chengyang/verification-test
-ExecStart=/home/chengyang/.venvs/ec-gfs-server/bin/python /home/chengyang/verification-test/fetch_gefs.py --days 3 --workers 4
+ExecStart=/home/chengyang/.venvs/ec-gfs-server/bin/python /home/chengyang/verification-test/fetch_gefs.py --days 11 --runs 0,6,12,18 --workers 4
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=DL_PROXY=http://127.0.0.1:17908

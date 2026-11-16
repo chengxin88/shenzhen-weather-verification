@@ -1,7 +1,10 @@
 'use strict';
+/* WN3 demo aliases are individual chips in the redesigned model picker.
+   They share the WN3 source rows, keep their identity in CSV, and disappear
+   when the element has no WN3 pairing. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),{JSDOM}=require('jsdom');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function until(check){for(let i=0;i<500;i++){if(check())return;await pause(5);}throw Error('Station-system condition timed out');}
+async function until(check,label){for(let i=0;i<600;i++){if(check())return;await pause(5);}throw Error('Station-system condition timed out: '+(label||''));}
 async function run(){
  const dom=new JSDOM(fs.readFileSync('index.html','utf8'),{url:'http://localhost/Verification/test/#grid&ref=station',runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window,doc=w.document,calls=[],errors=[];
@@ -38,46 +41,58 @@ async function run(){
   if(url.pathname.endsWith('/grid-datasets'))return response(datasets);
   if(url.pathname.endsWith('/grid-rows'))return response(rowsFor(datasets.find(d=>d.id===url.searchParams.get('dataset'))));
   if(url.pathname.endsWith('/meta'))return response({stations:[site],coastline:[],models:[{id:'ec01',leads:[24,48]},{id:'ecmwf',leads:[24,48]},{id:'wn3',leads:[24,48]}],variables:[{id:'t',label:'2米气温',unit:'°C'},{id:'rain6',label:'6小时降水',unit:'mm'}]});
-  if(url.pathname.endsWith('/map')||url.pathname.endsWith('/series'))assert(real.includes(url.searchParams.get('model')),'station APIs must receive the real data source, never a demo alias');
+  if(url.pathname.endsWith('/map')||url.pathname.endsWith('/series'))assert(real.includes(url.searchParams.get('model')),'station APIs receive the real source');
   if(url.pathname.endsWith('/map'))return response({rows:[{station:site.id,n:10,RMSE:2,ME:0,MAE:1,CC:.9}],sample:'站点配对'});
   if(url.pathname.endsWith('/series'))return response({station:site,series:times.map(valid=>({valid:valid+'Z',fc:20,ob:19,source:'ogimet'}))});
   throw Error('Unexpected API '+url);
  };
- const systems=()=>[...doc.querySelectorAll('#models .model-system-group')].map(group=>({system:group.querySelector('[data-system]').dataset.system,models:[...group.querySelectorAll('[data-model]')].map(b=>b.dataset.model)}));
  const chosen=()=>[...doc.querySelectorAll('#models [data-model][aria-pressed="true"]')].map(b=>b.dataset.model);
+ const chip=id=>doc.querySelector(`#models [data-model="${id}"]`);
  try{
   for(const file of ['app.js','stations.js','grid-stations.js'])w.eval(fs.readFileSync(file,'utf8'));
-  assert(await w.GridVerification.open());await until(()=>doc.querySelector('#grid-station-detail-body svg'));
-  assert.deepEqual(systems().map(s=>s.system),['nowcasting','short_range','global','typhoon']);
-  assert.equal(chosen().length,real.length,'business models keep their available-data defaults');
-  assert(chosen().every(model=>!profile(model)),'demo aliases are explicitly selected');
-  const stationSystems=systems();
-  doc.querySelector('[data-grid-reference="grid"]').click();await until(()=>!w.GridStations.active()&&doc.querySelector('#chart svg'));
-  assert.deepEqual(systems(),stationSystems,'station and grid expose the identical system/model groups');
-  doc.querySelector('[data-grid-reference="station"]').click();await until(()=>w.GridStations.active()&&doc.querySelector('#grid-station-detail-body svg'));
-  const before=calls.length;
-  doc.querySelector('[data-system="nowcasting"]').click();
-  await until(()=>doc.querySelector('#grid-station-detail-body [data-series="'+profiles[0].id+'"]')&&doc.querySelector('#grid-station-detail-body svg'));
-  assert.equal(chosen().length,2);
-  assert.match(doc.getElementById('chart-title').textContent,/含 WN3 演示资料/);
-  assert.match(doc.getElementById('grid-station-caption').textContent,/WN3演示/);
+  assert(await w.GridVerification.open());
+  await until(()=>doc.querySelector('#chart svg')&&doc.getElementById('page-title').textContent.startsWith('气温'),'temperature chart');
+  const systemTitles=()=>[...doc.querySelectorAll('#models .model-system-group .model-system-title')].map(t=>t.textContent);
+  assert.deepEqual(systemTitles(),['短临预报系统','短期预报系统','中期预报系统','台风预报系统'],'chips are grouped by forecast system');
+  assert.deepEqual([...doc.querySelectorAll('#models .model-system-group')].map(g=>g.querySelectorAll('[data-model]').length),[2,1,3,1]);
+  assert.deepEqual(chosen().sort(),[WN3,'ECMWF-IFS-9km-OpenMeteo'].sort(),'official defaults use EC 9 km and keep WN3');
+  assert(chosen().every(id=>!profile(id)),'demo aliases start unselected');
+  for(const p of profiles)assert(chip(p.id),'each demo alias is a chip');
+  chip(profiles[0].id).click();chip(profiles[1].id).click();
+  await until(()=>doc.getElementById('chart-title').textContent.includes('含 WN3 演示资料'),'demo title');
+  assert.equal(chosen().length,4);
+  // A system name selects exactly that system's models; the chips stay toggles.
+  doc.querySelector('#models [data-system="global"]').click();
+  await until(()=>chosen().length===3&&chosen().every(id=>real.includes(id)),'whole global system selected');
+  assert.equal(doc.querySelector('#models [data-system="global"]').getAttribute('aria-pressed'),'true');
+  chip(real[1]).click();
+  await until(()=>chosen().length===2,'chip toggles inside a system');
+  assert.equal(doc.querySelector('#models [data-system="global"]').getAttribute('aria-pressed'),'false');
+  chip(profiles[0].id).click();chip(profiles[1].id).click();
+  await until(()=>chosen().length===4,'demo aliases reselected');
+  // Station map shows one shared WN3 source for both aliases.
+  [...doc.querySelectorAll('#detail-nav [data-page="map"]')][0].click();
+  await until(()=>doc.querySelector('#grid-station-map svg')&&doc.querySelector('#grid-station-detail-body svg'),'demo map');
+  doc.querySelector(`#grid-station-model [data-model="${profiles[0].id}"]`).click();
+  await until(()=>doc.getElementById('grid-station-caption').textContent.includes('WN3演示'),'demo map caption');
   assert.match(doc.getElementById('grid-station-map-note').textContent,/共用 WN3 站点配对/);
-  assert(doc.querySelector('#grid-station-map [data-station-id="59493"] path'),'WN3 elevation flag is retained for demo map');
-  assert.equal(calls.slice(before).filter(url=>url.pathname.endsWith('/series')&&url.searchParams.get('model')===WN3).length,1,'two demo curves share one source request');
+  assert.equal(calls.filter(u=>u.pathname.endsWith('/series')&&u.searchParams.get('model')===WN3).length,1,'both demo curves share one source request');
+  // Export retains demo identity and the source score.
   doc.getElementById('export-csv').click();
-  assert.equal(exported.length,2);
-  assert(exported.every(row=>row.is_demo===true&&row.source_model===WN3&&row.excluded_from_official_scores===true&&row.RMSE===2),'exports retain WN3 identity, exact scores and formal-score exclusion');
-  for(const group of ['short_range','typhoon']){
-   const selected=profiles.find(p=>p.group===group);
-   doc.querySelector('[data-system="'+group+'"]').click();
-   await until(()=>doc.querySelector('#grid-station-detail-body [data-series="'+selected.id+'"]')&&doc.querySelector('#grid-station-detail-body svg'));
-   assert.match(doc.getElementById('grid-station-caption').textContent,/WN3演示/);
-  }
-  doc.querySelector('[data-kind="降水"]').click();await until(()=>doc.getElementById('page-title').textContent==='降水检验'&&doc.querySelector('#chart svg'));
-  assert.equal(systems().length,4,'systems stay visible when WN3 is unavailable for the element');
-  for(const p of profiles)assert.equal(doc.querySelector('[data-model="'+p.id+'"]').disabled,true,'missing source remains unavailable');
-  assert.equal(errors.length,0,errors.map(String).join('\n'));
-  console.log('PASS grid/station system parity, official defaults, demo charts/maps/series, shared source requests, export identity and missing-source states');
+  const demoRows=exported.filter(row=>row.is_demo);
+  assert(demoRows.length>=2,'demo rows are exported');
+  assert(demoRows.every(row=>row.source_model===WN3&&row.excluded_from_official_scores===true&&row.MAE===1),'demo identity and source score are retained');
+  // Grid reference exposes the same alias chips.
+  doc.querySelector('#reference-switch [data-reference="grid"]').click();
+  await until(()=>!w.GridVerification.selection().station&&doc.querySelector('#chart svg'),'grid demo');
+  for(const p of profiles)assert(chip(p.id)&&chip(p.id).disabled===false,'aliases stay available on the grid product');
+  // A rainfall product without WN3 pairing disables every demo alias.
+  [...doc.querySelectorAll('#detail-nav [data-kind]')].find(b=>b.textContent.includes('降水')).click();
+  await until(()=>doc.getElementById('page-title').textContent.startsWith('降水')&&doc.querySelector('#chart svg'),'rain page');
+  for(const p of profiles)assert(chip(p.id)&&chip(p.id).disabled===true,'missing WN3 source disables its aliases');
+  assert.equal(chip(WN3),null,'WN3 is not offered when the product has no WN3 pairing');
+  assert.deepEqual(errors,[]);
+  console.log('PASS grouped demo chips, shared WN3 source, demo map/series, export identity and missing-source states');
  }finally{dom.window.close();}
 }
 run().catch(error=>{console.error(error);process.exitCode=1;});

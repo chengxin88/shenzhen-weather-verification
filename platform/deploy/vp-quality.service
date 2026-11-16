@@ -1,0 +1,11 @@
+[Unit]
+Description=Verification platform data quality scan (arrival board + 7-day arrival log)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/yjzx/verification-platform/verification-test
+EnvironmentFile=/home/yjzx/verification-platform/deploy/env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/home/yjzx/verification-platform/venv/bin/python quality_control.py --scan
+Nice=10
+TimeoutStartSec=5min

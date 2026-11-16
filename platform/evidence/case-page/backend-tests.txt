@@ -1,0 +1,9 @@
+test_01_scores_unchanged (test_case_page.CasePageLiveTests.test_01_scores_unchanged) ... ok
+test_02_fields_match_contingency_counts (test_case_page.CasePageLiveTests.test_02_fields_match_contingency_counts) ... 落区与评分核对：288 组 N/H/M/F/C 完全相同
+ok
+test_03_validation_and_first_run (test_case_page.CasePageLiveTests.test_03_validation_and_first_run) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 52.657s
+
+OK

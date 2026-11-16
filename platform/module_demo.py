@@ -37,7 +37,7 @@ def catalog():
     return dict(schema=1, profiles=profiles(), groups=GROUPS, source_model=WN3,
                 generated=datetime.now(ZoneInfo('Asia/Shanghai')).isoformat(),
                 monthly=monthly_catalog(),
-                unavailable={'circulation':'WN3 本地缓存没有等压面高空场，暂不生成环流演示评分。',
+                unavailable={'circulation':'环流检验不提供 WN3 演示资料；图中 WN3 为真实高空评分（00Z/12Z 起报）。',
                              'typhoon':'WN3 本地缓存没有台风预报路径，暂不生成登陆和路径演示评分。'})
 
 

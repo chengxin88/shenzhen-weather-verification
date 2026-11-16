@@ -1,0 +1,38 @@
+{
+  "baseline": {
+    "tests": 225,
+    "failures": 4,
+    "errors": 10
+  },
+  "candidate": {
+    "tests": 240,
+    "failures": 4,
+    "errors": 10
+  },
+  "same_existing_failures": true,
+  "new_tests": {
+    "tests": 15,
+    "passed": 15
+  },
+  "frontend": {
+    "files": 14,
+    "passed": 14,
+    "jsdom": "/tmp/st-jsdom/node_modules"
+  },
+  "existing_failures": [
+    "test_all_demo_routes_and_formal_routes_remain_pending (test_wn3_demo.HTTPDemo.test_all_demo_routes_and_formal_routes_remain_pending)",
+    "test_all_grid_interfaces_preserve_wn3_identity_and_original_values (test_wn3_demo.RealSample.test_all_grid_interfaces_preserve_wn3_identity_and_original_values)",
+    "test_corrupt_sample_rejected_and_missing_sample_graceful (test_wn3_demo.RealSample.test_corrupt_sample_rejected_and_missing_sample_graceful)",
+    "test_download_and_scoring_agree_on_the_speed_field (test_station_xinjiang.WN3Speed.test_download_and_scoring_agree_on_the_speed_field)",
+    "test_explicit_proxy_does_not_inherit_metered_link (test_stations.DownloadAndIncrementalTests.test_explicit_proxy_does_not_inherit_metered_link)",
+    "test_full_map_coverage_and_real_linework (test_station_basemap.StationBasemapTests.test_full_map_coverage_and_real_linework)",
+    "test_month_integrity_and_private_provenance (test_module_demo.Metadata.test_month_integrity_and_private_provenance)",
+    "test_month_scientific_counts_from_same_run_hourly_fields (test_module_demo.Metadata.test_month_scientific_counts_from_same_run_hourly_fields)",
+    "test_month_time_identity_and_missing_days (test_module_demo.Metadata.test_month_time_identity_and_missing_days)",
+    "test_no_fabricated_minute_fields_different_batch_or_window (test_wn3_demo.RealSample.test_no_fabricated_minute_fields_different_batch_or_window)",
+    "test_preview_refresh_cannot_rebuild_any_catalog (test_stations.StationHTTPTests.test_preview_refresh_cannot_rebuild_any_catalog)",
+    "test_real_source_and_same_run_trailing_rain_sum (test_wn3_demo.RealSample.test_real_source_and_same_run_trailing_rain_sum)",
+    "test_routes_and_static_assets (test_module_demo.HTTP.test_routes_and_static_assets)",
+    "test_scores_match_real_paired_arrays (test_wn3_demo.RealSample.test_scores_match_real_paired_arrays)"
+  ]
+}

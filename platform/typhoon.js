@@ -8,10 +8,13 @@ window.NativeTyphoon=(()=>{
  const metrics=[['登陆时刻预报点误差(km)','登陆点位置误差','km',''],['时间误差(h)','到达时间误差','小时','正值偏晚，负值偏早'],['中心气压误差(hPa)','中心气压误差','hPa','正值偏高，负值偏低'],['最大风速误差(m/s)','最大风速误差','m/s','正值偏强，负值偏弱']];
  const columns=['来源','起报提前(h)','起报时刻(BJT)','登陆时刻预报点误差(km)','时间误差(h)','中心气压误差(hPa)','最大风速误差(m/s)','状态'];
  const columnNames={'登陆时刻预报点误差(km)':'登陆点误差(km)','时间误差(h)':'时间误差(h)','中心气压误差(hPa)':'气压误差(hPa)','最大风速误差(m/s)':'风速误差(m/s)'};
- let meta=null,detail=null,result=null,state={year:null,storm_id:null,landfall:0,sources:[]},leadWindow='all',seq=0,controller=null,timer=null,opened=false;
+ let meta=null,detail=null,result=null,state={year:null,storm_id:null,landfall:0,sources:[]},leadWindow='all',view='issue',seq=0,controller=null,timer=null,opened=false;
  const chartCache=new Map(),cacheKey='szverify-native-typhoon-v1';
  const host=()=>by('typhoon-workspace');
- function shell(){host().innerHTML=`<div class="page-heading"><div><p class="eyebrow">TYPHOON VERIFICATION</p><h1>台风登陆检验</h1><p>比较登陆前72小时内各个实际起报批次的位置、到达时间和强度误差。</p></div></div><section class="filter-card" id="typhoon-controls" aria-label="台风检验条件"></section><div class="notice" id="typhoon-status" role="status">正在读取台风归档…</div><div id="typhoon-results" hidden></div>`;}
+ function shell(){host().innerHTML=`<div class="page-heading"><div><p class="eyebrow">TYPHOON VERIFICATION</p><h1>台风检验</h1><p>单次起报比较同一次起报的路径和强度；登陆检验比较登陆前72小时内各起报批次的误差。</p></div><div class="choice-buttons" id="typhoon-view" role="group" aria-label="台风检验视图"><button type="button" data-view="issue" aria-pressed="true">单次起报</button><button type="button" data-view="landfall" aria-pressed="false">登陆检验</button></div></div><section class="filter-card" id="typhoon-controls" aria-label="台风检验条件"></section><div class="notice" id="typhoon-status" role="status">正在读取台风归档…</div><div id="typhoon-results" hidden></div><div id="typhoon-track-host" hidden></div>`;by('typhoon-view').querySelectorAll('button').forEach(b=>b.onclick=()=>setView(b.dataset.view));}
+ function setView(next){view=next;by('typhoon-view').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));const issue=view==='issue';by('typhoon-controls').hidden=issue;by('typhoon-status').hidden=issue;by('typhoon-results').hidden=issue||!result;by('typhoon-track-host').hidden=!issue;if(issue)window.TyphoonTrack.open(by('typhoon-track-host'));else{window.TyphoonTrack.close();landfall();}}
+ // 登陆检验的资料只在切到这个视图时才读取；页面默认打开单次起报。
+ function landfall(){if(meta&&detail&&result){drawControls();showResult(result,true);}else if(meta&&state.storm_id)loadStorm(state.storm_id);else loadCatalog();}
  function cancel(){seq++;clearTimeout(timer);controller?.abort();controller=null;}
  function status(text,error=false){by('typhoon-status').textContent=text;by('typhoon-status').classList.toggle('error',error);}
  async function api(path,body,signal){
@@ -28,7 +31,7 @@ window.NativeTyphoon=(()=>{
   if(!meta)return;
   const options=(items,current)=>items.map(([v,label])=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(label)}</option>`).join('');
   by('typhoon-controls').innerHTML=`<div class="primary-filters typhoon-selects"><label>台风年份<select id="typhoon-year">${options(meta.years.map(y=>[y,y+'年']),state.year)}</select></label><label>选择台风<select id="typhoon-storm" ${meta.storms.length?'':'disabled'}>${options(meta.storms.map(s=>[s.storm_id,`${s.number}号 ${s.chinese_name}（${s.english_name}）`]),state.storm_id)}</select></label><label>官方登陆记录<select id="typhoon-landfall" ${detail?.landfalls.length?'':'disabled'}>${detail?.landfalls.length?options(detail.landfalls.map(l=>[l.index,`第${l.index+1}次 · ${date(l.time)} BJT · ${l.address}`]),state.landfall):'<option>暂无官方登陆记录</option>'}</select></label></div>
-   <div class="model-row"><span>检验来源</span><div id="typhoon-sources" class="model-chips">${[...meta.sources,...window.DemoModels.placeholders()].map(s=>`<button type="button" class="model-chip" data-source="${esc(s.id)}" ${s.disabled?'disabled title="WN3没有台风路径，暂不生成评分"':''} aria-pressed="${state.sources.includes(s.id)}"><i style="background:${esc(s.color)}"></i>${esc(s.is_demo?window.DemoModels.label(s.id):sourceLabel(s.label))}</button>`).join('')}</div></div>
+   <div class="model-row"><span>检验来源</span><div id="typhoon-sources" class="model-chips">${meta.sources.map(s=>`<button type="button" class="model-chip" data-source="${esc(s.id)}" ${s.disabled?'disabled title="WN3没有台风路径，暂不生成评分"':''} aria-pressed="${state.sources.includes(s.id)}"><i style="background:${esc(s.color)}"></i>${esc(s.is_demo?window.DemoModels.label(s.id):sourceLabel(s.label))}</button>`).join('')}</div></div>
    <p class="filter-note">选择条件后自动加载。默认显示官方机构；点击来源可加入数值和AI模式。时间均为北京时间，缺测保留为空。</p>`;
   by('typhoon-year').onchange=e=>loadCatalog(Number(e.target.value));by('typhoon-storm').onchange=e=>loadStorm(Number(e.target.value));by('typhoon-landfall').onchange=e=>{state.landfall=Number(e.target.value);dirty();};
   by('typhoon-sources').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.sources=state.sources.includes(b.dataset.source)?state.sources.filter(s=>s!==b.dataset.source):meta.sources.map(s=>s.id).filter(s=>state.sources.includes(s)||s===b.dataset.source);dirty();});
@@ -42,6 +45,14 @@ window.NativeTyphoon=(()=>{
    if(!state.sources.length)state.sources=meta.sources.filter(s=>['CMA/NMC','JMA','JTWC'].includes(s.id)).map(s=>s.id);
    drawControls();if(!meta.storms.length){status(`${state.year}年暂无台风资料。`);return;}
    detail=await api(`storm?year=${state.year}&storm_id=${state.storm_id}`,null,signal);if(current!==seq)return;
+   if(!detail.landfalls.length){
+    status('最新台风还没有登陆记录，正在找最近一个登陆的台风…');
+    const rest=meta.storms.filter(s=>s.storm_id!==state.storm_id).slice(0,30);
+    for(let i=0;i<rest.length&&!detail.landfalls.length;i+=6){
+     const found=await Promise.all(rest.slice(i,i+6).map(s=>api(`storm?year=${state.year}&storm_id=${s.storm_id}`,null,signal).catch(()=>null)));if(current!==seq)return;
+     const k=found.findIndex(d=>d?.landfalls.length);if(k>=0){detail=found[k];state.storm_id=rest[i+k].storm_id;}
+    }
+   }
    state.landfall=detail.default_landfall;drawControls();await calculate(current,signal);
   }catch(e){if(current===seq&&e.name!=='AbortError')status(e.message,true);}
  }
@@ -51,7 +62,7 @@ window.NativeTyphoon=(()=>{
  }
  function dirty(){const [current,signal]=begin('正在加载所选条件…');drawControls();timer=setTimeout(()=>calculate(current,signal),250);}
  async function calculate(current,signal){
-  if(!detail?.landfalls.length){status('该台风暂无可用的官方登陆记录，请选择其他台风。');return;}
+  if(!detail?.landfalls.length){status('这个台风没有官方登陆记录，做不了登陆检验。可以点右上角「单次起报」看它的路径和强度，或换一个台风。');return;}
   if(!state.sources.length){status('请至少选择一个检验来源。');return;}
   const selection={...state,sources:[...state.sources]},key=JSON.stringify([meta.cache_version,meta.archive_updated,selection]),saved=remembered(key);
   try{
@@ -104,5 +115,5 @@ window.NativeTyphoon=(()=>{
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 740" style="font-family:Segoe UI,Microsoft YaHei,sans-serif"><rect width="1100" height="740" fill="white"/><text x="30" y="30" font-size="20" fill="#203b4e">${esc(result.title)} · 台风登陆检验</text><text x="30" y="52" font-size="12" fill="#637a89">${esc(date(result.landfall.time))} BJT · ${esc(result.landfall.address)}</text>${result.sources.map((s,i)=>`<text x="${30+i*150}" y="75" font-size="12" fill="${esc(s.color)}">${esc(s.label)}</text>`).join('')}${panels}<text x="30" y="732" font-size="11" fill="#637a89">时间误差按首次进入登陆点150公里范围计算；风速口径因来源而异。</text></svg>`;
   save(svg,'image/svg+xml;charset=utf-8',`台风登陆误差-${state.storm_id}.svg`);
  }
- return {open(){opened=true;if(!by('typhoon-status'))shell();if(meta&&detail&&result){drawControls();showResult(result,true);}else if(meta&&state.storm_id)loadStorm(state.storm_id);else loadCatalog();},close(){opened=false;cancel();},refresh(){try{sessionStorage.removeItem(cacheKey);}catch{}chartCache.clear();if(opened)loadCatalog(state.year);}};
+ return {open(){opened=true;if(!by('typhoon-status'))shell();setView(view);},close(){opened=false;cancel();},refresh(){try{sessionStorage.removeItem(cacheKey);}catch{}chartCache.clear();if(opened)loadCatalog(state.year);}};
 })();

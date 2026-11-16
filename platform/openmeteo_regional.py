@@ -25,7 +25,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 import openmeteo_ecmwf as ec
 
-BACKEND='/home/chengyang/gods-eye-weather/weather_backend'
+BACKEND='/home/yjzx/verification-platform/gods-eye-weather/weather_backend'
 if BACKEND not in sys.path:sys.path.append(BACKEND)
 
 SCHEMA='openmeteo-ifs-regional-v2'
@@ -33,7 +33,7 @@ BOUNDS=[60.,0.,150.,60.]
 LON=np.arange(600,1501,dtype=float)/10
 LAT=np.arange(0,601,dtype=float)/10
 BASE='https://openmeteo.s3.amazonaws.com/'
-UPPER=Path('/home/chengyang/gods-eye-weather/weather-data/region-v4/ecmwf')
+UPPER=Path('/home/yjzx/verification-platform/gods-eye-weather/weather-data/region-v4/ecmwf')
 SPECS={
     'temperature_2m':('°C',-100,70), 'dew_point_2m':('°C',-110,70),
     'pressure_msl':('hPa',500,1150), 'precipitation':('mm',0,3000),
@@ -51,7 +51,7 @@ def urlbase(run): return BASE+'data_run/ecmwf_ifs/'+ec.run_time(run).strftime('%
 
 def session():
     value=requests.Session();value.trust_env=False
-    proxy=os.getenv('OPENMETEO_EC_PROXY','http://127.0.0.1:17908')
+    proxy=os.getenv('OPENMETEO_EC_PROXY','')
     if proxy:value.proxies={'http':proxy,'https':proxy}
     return value
 
@@ -102,13 +102,14 @@ def manifest(ident):
     if (data.get('schema')!=SCHEMA or data.get('run')!=ec.iso(ec.run_time(ident)) or
         data.get('bounds')!=BOUNDS or data.get('model')!=ec.MODEL or data.get('grid_degrees')!=.1 or
         not set(SPECS)<=set(data.get('fields',{}))):raise ValueError('Regional run identity mismatch')
-    expected=expected_leads(ident)
-    if data.get('leads')!=expected:raise ValueError('Regional time axis mismatch')
+    accepted={tuple(expected_leads(ident,240)),tuple(expected_leads(ident,168))}
+    if tuple(data.get('leads',())) not in accepted:raise ValueError('Regional time axis mismatch')
     return data
 
 
-def expected_leads(ident):
-    end=168 if ec.run_time(ident).hour in (0,12) else 144
+def expected_leads(ident,end=None):
+    limit=240 if ec.run_time(ident).hour in (0,12) else 144
+    end=limit if end is None else min(int(end),limit)
     return list(range(91))+list(range(93,145,3))+(list(range(150,end+1,6)) if end>144 else [])
 
 
@@ -121,7 +122,7 @@ def field_file(ident,name,digest):
         for block in iter(lambda:handle.read(4*1024*1024),b''):h.update(block)
     if h.hexdigest()!=digest:raise ValueError('Regional field checksum mismatch')
     array=np.load(path,allow_pickle=False,mmap_mode='r')
-    if array.dtype!=np.float32 or array.shape!=(len(expected_leads(ident)),len(LAT),len(LON)):
+    if array.dtype!=np.float32 or array.shape!=(len(manifest(ident)['leads']),len(LAT),len(LON)):
         raise ValueError('Regional array dimensions mismatch')
     return array
 
