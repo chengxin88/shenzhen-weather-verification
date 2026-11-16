@@ -185,7 +185,7 @@ class AggregateEquivalenceTests(unittest.TestCase):
             end=datetime(2026,10,25,9,17,tzinfo=UTC)
             rng=np.random.default_rng(1234)
             records=[]
-            for age in (0,1,3,7,29,30,31):
+            for age in (0,1,3,7,14,15,16):
                 for offset in (-1,0,1):
                     valid=end-timedelta(days=age)+timedelta(seconds=offset)
                     for model in ('ec01','gfs'):
@@ -199,7 +199,7 @@ class AggregateEquivalenceTests(unittest.TestCase):
             db.executemany('INSERT INTO pairs VALUES (?,?,?,?,?,?,?,?,?,?,?)',records);db.commit()
             with patch.object(score,'grid_aggregates'):
                 score.aggregates(db,root,end)
-            for days in (1,3,7,30):
+            for days in (1,3,7,15):
                 expected=[];params=(iso(end-timedelta(days=days)),iso(end))
                 for var in VARIABLES:
                     for threshold in THRESHOLDS.get(var,[None]):

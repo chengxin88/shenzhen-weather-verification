@@ -101,7 +101,7 @@ class StationProducts(unittest.TestCase):
             self.assertEqual(r['ETS'],expected)
         self.assertEqual(sum(r['F'] for r in graded),1)
         for hour in ('all','08'):
-            detail=api.station(dict(id='a1',var='rain24',model='ec01',group='near',days='30',hour=hour))
+            detail=api.station(dict(id='a1',var='rain24',model='ec01',group='near',days='15',hour=hour))
             self.assertEqual(next(r for r in detail['stats'] if r.get('threshold')==.1)['PC'],1.)
         points=api.grid_rows(dict(dataset='station-气温-2m',station='a2',start='2026-10-25',end='2026-10-25'))
         self.assertEqual((points[0]['N1'],points[0]['N2']),(0,1))

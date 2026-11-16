@@ -92,7 +92,7 @@ class WindowPolicy(unittest.TestCase):
 
     def test_unadjusted_results_every_value_unchanged_with_or_without_nmic_end(self):
         before = {(r,e,d):self.overview(r,e,d) for r in ('all','hk','sz')
-                  for e in ('t','rain') for d in (3,7,30)}
+                  for e in ('t','rain') for d in (3,7,15)}
         del self.metadata['nmic_end']; self.save()
         for (region,element,days), expected in before.items():
             self.assertEqual(self.overview(region,element,days),expected)

@@ -239,8 +239,8 @@ class StationHTTPTests(unittest.TestCase):
         atomic_json(self.root/'current.json',dict(generation='20261025T000000'))
         atomic_json(directory/'meta.json',dict(schema=1,generated='2026-10-25T12:00:00Z',window_end='2026-10-25T12:00:00Z',
                     stations=[dict(id='59287',type='synop')],sources={},models=[]))
-        atomic_json(directory/'scores-30.json',[dict(model='ec01',var='t',lead=24,n=1,ME=1,MAE=1,RMSE=1,CC=None)])
-        atomic_json(directory/'station-scores-30.json',[])
+        atomic_json(directory/'scores-15.json',[dict(model='ec01',var='t',lead=24,n=1,ME=1,MAE=1,RMSE=1,CC=None)])
+        atomic_json(directory/'station-scores-15.json',[])
         db=database(directory/'pairs.sqlite');db.execute('INSERT INTO pairs VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                   ('ec01','2026-10-24T09:00:00Z',24,'2026-10-25T09:00:00Z','59287','t',21,20,'ogimet',0,'2026-10-25T09:00:00Z'))
         db.execute('CREATE TABLE detail_stats(station,model,var,lead,days,stats)');db.commit();db.close()
@@ -256,20 +256,20 @@ class StationHTTPTests(unittest.TestCase):
     def test_routes_only_read_persisted_results(self):
         before={str(p.relative_to(self.root)):(p.stat().st_mtime_ns,p.stat().st_size) for p in self.root.rglob('*') if p.is_file()}
         with patch.object(server,'rebuild',side_effect=AssertionError('rebuild')),patch('requests.sessions.Session.request',side_effect=AssertionError('network')):
-            for path in ['meta','scores?var=t&models=ec01,ecmwf&days=30','station?id=59287&var=t&model=ec01&lead=24']:
+            for path in ['meta','scores?var=t&models=ec01,ecmwf&days=15','station?id=59287&var=t&model=ec01&lead=24']:
                 status,body=self.request('api/stations/'+path);self.assertEqual(status,200);self.assertNotIn(b'NaN',body)
             self.assertEqual(json.loads(self.request('api/stations/station?id=59287')[1])['series'][0]['ob'],20)
         after={str(p.relative_to(self.root)):(p.stat().st_mtime_ns,p.stat().st_size) for p in self.root.rglob('*') if p.is_file()}
         self.assertEqual(before,after)
 
     def test_day_windows_follow_published_files(self):
-        self.assertEqual(json.loads(self.request('api/stations/meta')[1])['windows'],[30])
+        self.assertEqual(json.loads(self.request('api/stations/meta')[1])['windows'],[15])
         status,body=self.request('api/stations/scores?var=t&days=1')
         self.assertEqual(status,400);self.assertIn('下次定时评分',json.loads(body)['error'])
         snapshot=self.root/'snapshots/20261025T000000'
         atomic_json(snapshot/'scores-1.json',[dict(model='ec01',var='t',lead=6,n=1,ME=0,MAE=0,RMSE=0,CC=None)])
         atomic_json(snapshot/'station-scores-1.json',[])
-        self.assertEqual(json.loads(self.request('api/stations/meta')[1])['windows'],[1,30])
+        self.assertEqual(json.loads(self.request('api/stations/meta')[1])['windows'],[1,15])
         status,body=self.request('api/stations/scores?var=t&models=ec01&days=1')
         self.assertEqual(status,200);self.assertEqual(json.loads(body)['rows'][0]['lead'],6)
         self.assertEqual(self.request('api/stations/scores?days=2')[0],400)
@@ -283,6 +283,8 @@ class StationHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('cache/stations/current.json')[0],404)
 
     def test_preview_refresh_cannot_rebuild_any_catalog(self):
+        # The read-only preview serves the published native-catalog.json from its data root; give it a minimal one.
+        atomic_json(self.root/'native-catalog.json',dict(datasets=[],rows=[]))
         with patch.dict(os.environ,{'VERIFICATION_READ_ONLY':'1','VERIFICATION_PREVIEW_DATA_ROOT':str(self.root)}),patch.object(server,'build_catalog',side_effect=AssertionError):
             self.assertEqual(self.request('api/catalog?refresh=1')[0],200)
             self.assertEqual(self.request('api/quality-control/refresh',b'{}')[0],405)
@@ -291,7 +293,9 @@ class StationHTTPTests(unittest.TestCase):
         for suffix in ['stations.js','stations.css']:
             self.assertEqual(self.request(suffix)[0],200)
         page=self.request('')[1].decode()
-        self.assertIn('data-module="stations"',page);self.assertIn('id="stations-workspace"',page)
+        # 2026-11-12 the menu entry for station verification was removed (old #stations links open the overview);
+        # the workspace section and stations.js are still in the page.
+        self.assertNotIn('data-module="stations"',page);self.assertIn('id="stations-workspace"',page)
         self.assertLess(page.index('./stations.js'),page.index('./modules.js'))
 
 
@@ -300,7 +304,10 @@ class DownloadAndIncrementalTests(unittest.TestCase):
         with patch.dict(os.environ,{'HTTPS_PROXY':'http://127.0.0.1:7897'}):
             client=station_sources.session()
             self.assertFalse(client.trust_env)
-            self.assertEqual(client.proxies['https'],'http://127.0.0.1:17908')
+            # Spark has direct egress, so station_common.PROXY is '' there (it was 127.0.0.1:17908 on the WSL laptop);
+            # either way the session must use that setting and ignore HTTPS_PROXY from the environment.
+            self.assertEqual(client.proxies,{'http':station_sources.PROXY,'https':station_sources.PROXY})
+            self.assertNotEqual(client.proxies['https'],'http://127.0.0.1:7897')
             client.close()
 
     def test_ogimet_error_latch_and_cross_request_spacing(self):
@@ -350,7 +357,7 @@ class DownloadAndIncrementalTests(unittest.TestCase):
             # Four refreshes published four generations; only the newest two remain, each with all day windows.
             kept=sorted((root/'snapshots').iterdir());self.assertEqual(len(kept),2)
             self.assertEqual(kept[-1].name,json.loads((root/'current.json').read_text())['generation'])
-            for days in (1,3,7,30):self.assertTrue((kept[-1]/f'scores-{days}.json').is_file(),days)
+            for days in (1,3,7,15):self.assertTrue((kept[-1]/f'scores-{days}.json').is_file(),days)
 
 
 import math
