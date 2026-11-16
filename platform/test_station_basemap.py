@@ -22,7 +22,10 @@ class StationBasemapTests(unittest.TestCase):
         west, south, east, north = self.basemap['map_bounds']
         self.assertLessEqual(west, 104.4)  # include Guangxi's western edge
         self.assertGreaterEqual(east, 120.7)  # include Fujian's eastern edge
-        self.assertEqual(north, 27)
+        self.assertEqual(north, BOX[3])  # station box widened to 18–33°N (was 27°N)
+        # Since 2026-11-05 the lines also cover the Xinjiang view (build_station_basemap.LINE_BOX:
+        # 88°E to the station box's east edge, up to 47°N); the page clips them to the frame it shows.
+        line_box = (88., BOX[1], BOX[2], 47.)
         layers = {}
         for key in ('coastline', 'country_boundaries', 'province_boundaries'):
             coordinates = self.basemap[key]
@@ -30,7 +33,7 @@ class StationBasemapTests(unittest.TestCase):
             for line in coordinates:
                 self.assertGreaterEqual(len(line), 2)
                 for lon, lat in line:
-                    self.assertTrue(west <= lon <= east and south <= lat <= north)
+                    self.assertTrue(line_box[0] <= lon <= line_box[2] and line_box[1] <= lat <= line_box[3])
             layers[key] = unary_union([LineString(line) for line in coordinates])
         # Check Fujian mainland, rather than accepting a Taiwan island at 120 E.
         self.assertGreater(layers['coastline'].intersection(box(118.2, 24.4, 119.9, 27)).length, 1)
@@ -38,7 +41,7 @@ class StationBasemapTests(unittest.TestCase):
         self.assertGreater(layers['country_boundaries'].intersection(box(106, 21.4, 108, 23.5)).length, 1)
         self.assertGreater(layers['province_boundaries'].intersection(box(110, 24, 116, 27)).length, 5)
         # A polygon clipped before extracting its boundary creates false frame edges.
-        frame = box(west, south, east, north).boundary
+        frame = box(*line_box).boundary
         for layer in layers.values():
             self.assertLess(layer.intersection(frame).length, .001)
 

@@ -48,7 +48,7 @@ class Overview(unittest.TestCase):
             add(model,48,1,'B','t',4)
             add(model,49,1,'A','t',.5)
             add(model,72,1,'B','t',1.5)
-            add(model,24,8,'A','t',30)  # outside 7 but in 30
+            add(model,24,8,'A','t',30)  # outside 7 but in 15
             for site in ('52112','52203','51495'): add(model,24,1,site,'t',0)
             add(model,24,1,'A','rain24',10,1)  # obs light/forecast moderate => B2 only
             add(model,24,2,'A','rain24',0,0,1)
@@ -59,7 +59,7 @@ class Overview(unittest.TestCase):
         db.executemany('INSERT INTO pairs VALUES (?,?,?,?,?,?,?,?,?)',pairs)
         db.commit(); db.close()
         # Hand-built equivalent of the offline per-lead score product.
-        for days in (3,7,30):
+        for days in (3,7,15):
             rows = []
             for model in ('ec01','gfs'):
                 for variable in ('t','rain24'):
@@ -83,7 +83,7 @@ class Overview(unittest.TestCase):
             row = self.request(element='t',day=day,days=7)['rows'][0]
             self.assertEqual((row['n'],row['N1'],row['N2'],row['MAE']),expected)
             self.assertEqual(row['ACC2'],expected[2]/expected[0])
-        self.assertEqual(self.request(element='t',day=1,days=30)['rows'][0]['n'],5)
+        self.assertEqual(self.request(element='t',day=1,days=15)['rows'][0]['n'],5)
         result = self.request(element='t')
         self.assertEqual(result['start'],'2026-11-02T08:00:00')
         self.assertEqual(result['end'],'2026-11-09T08:00:00')
@@ -139,7 +139,7 @@ class Overview(unittest.TestCase):
         self.assertEqual(changed['grades'][-1]['id'],6)
         self.assertFalse((self.root/'pairs.sqlite').exists())
         self.assertEqual(sorted(p.name for p in self.directory.iterdir()),
-                         ['meta.json','pairs.sqlite','scores-3.json','scores-30.json','scores-7.json'])
+                         ['meta.json','pairs.sqlite','scores-15.json','scores-3.json','scores-7.json'])
 
     def test_forecast_grade_can_be_hidden_by_table31_underforecast(self):
         directory = self.make_snapshot('20261109T000003',extreme=True)

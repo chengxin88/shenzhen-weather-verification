@@ -1,6 +1,6 @@
 {
   "captured_date": "2026-11-16",
-  "source": "Spark verification-platform/verification-test (git 237efc5, branch spark)",
+  "source": "Spark verification-platform/verification-test (git f4538d8, branch spark)",
   "files": [
     {
       "file": "CASE_PAGE_REPORT.md",
@@ -952,7 +952,7 @@
     },
     {
       "file": "test_guifan_scores.py",
-      "sha256": "62f088f67f909b04ba73dd6d18f9299bbc8e53ad3d4a42ccc897a1797712d27b",
+      "sha256": "165a5ea8a26e3cb0127a70ac2cf0e7c5bb71f7a678f8efce5ec6dc0dd24f0ae0",
       "bytes": 16981,
       "dereferenced_symlink": false
     },
@@ -988,7 +988,7 @@
     },
     {
       "file": "test_nmic_window.py",
-      "sha256": "fa87127b859eb41cd89d766a67c65bfcb7a5ae137eb0556ee48de184eafe20e1",
+      "sha256": "66c8b7799ab48eb80b7747346b28b29a4953991a5a63e65de58549e63f454709",
       "bytes": 9471,
       "dereferenced_symlink": false
     },
@@ -1072,8 +1072,8 @@
     },
     {
       "file": "test_station_basemap.py",
-      "sha256": "5a57f8dbd6b4edae6ab6d6dd37db02ec1d948508b247f5ae095a2bfa170490af",
-      "bytes": 3125,
+      "sha256": "7a313e279aa628eb357066e37e816464d5d9038d00942b2cb9a3731b00ca9a66",
+      "bytes": 3439,
       "dereferenced_symlink": false
     },
     {
@@ -1096,13 +1096,13 @@
     },
     {
       "file": "test_station_incremental.py",
-      "sha256": "97539feb88c259de1bf0d3392c93250ea4229265145ba9fe678533cf77430e37",
+      "sha256": "0a71ab506878e46500a1585440d48510424a3be288b21668eabc80672ce0a171",
       "bytes": 24213,
       "dereferenced_symlink": false
     },
     {
       "file": "test_station_overview.py",
-      "sha256": "28df5c2ba812e4128c556b8028ed30fd75df40cfbc453c0af64f99c91f246b2b",
+      "sha256": "c2a9aa1fc630524793b71019fd2516db9d28fba829cf958fea7c41b67c0c8ba7",
       "bytes": 10397,
       "dereferenced_symlink": false
     },
@@ -1156,8 +1156,8 @@
     },
     {
       "file": "test_stations.py",
-      "sha256": "3138c59f152944d71c6618790e66808774b3fc511ab3f6745a5b5040ace3a656",
-      "bytes": 23125,
+      "sha256": "d26a733fb6f0a975981e48ca8dd3671341faff6f2301a9ba81021a9e90b72fde",
+      "bytes": 23839,
       "dereferenced_symlink": false
     },
     {
