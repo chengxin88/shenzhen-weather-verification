@@ -24,9 +24,9 @@ window.MonthlyPrecip=(()=>{
   const w=data?.windows||[],ths=data?.thresholds||[],models=(data?.models||[]).map(m=>m.id);
   by('monthly-controls').innerHTML=`<div class="primary-filters monthly-filters">
    <label class="filter-field"><span>检验月份</span><select id="monthly-month">${(catalog?.months||[]).map(m=>`<option value="${esc(m.month)}" ${m.month===state.month?'selected':''}>${esc(m.month.replace('-','年'))}月</option>`).join('')}</select></label>
-   <div class="filter-field"><span>起报时次 · 时效</span><div class="choice-buttons" role="group" aria-label="起报时次">${w.map(x=>`<button type="button" data-window="${esc(x.id)}" aria-pressed="${x.id===state.window}">${esc(x.label)}</button>`).join('')}</div></div>
+   <div class="filter-field"><span>用哪次起报的预报</span><div class="choice-buttons" role="group" aria-label="起报时次">${w.map(x=>`<button type="button" data-window="${esc(x.id)}" aria-pressed="${x.id===state.window}">${esc(winLabel(x))}</button>`).join('')}</div></div>
    <div class="filter-field"><span>评分阈值 · 24小时 mm</span><div class="choice-buttons" role="group" aria-label="降水阈值">${ths.map(t=>`<button type="button" data-threshold="${t.value}" aria-pressed="${String(t.value)===state.threshold}">${esc(t.label)}</button>`).join('')}</div></div></div>
-   <div class="model-row"><span>比较模式</span><div class="model-chips">${models.map(m=>`<button type="button" class="model-chip" data-model="${esc(m)}" aria-pressed="${state.models.includes(m)}"><i style="background:${palette[m]||'#777'}"></i>${esc(label(m))}</button>`).join('')}${demoMode?'':window.DemoModels.profiles().map(p=>`<button class="model-chip" data-model="${esc(p.id)}" disabled title="请切换至WN3演示资料，查看缓存实际月份">${esc(window.DemoModels.label(p.id))}</button>`).join('')}</div></div>
+   <div class="model-row"><span>比较模式</span><div class="model-chips">${models.map(m=>`<button type="button" class="model-chip" data-model="${esc(m)}" aria-pressed="${state.models.includes(m)}"><i style="background:${palette[m]||'#777'}"></i>${esc(label(m))}</button>`).join('')}</div></div>
    <p class="filter-note">${demoMode?'WN3演示资料：原生0.1°集合均值，连续24个完整小时段相加；所有目标模式共用这批资料，不计入正式排名。仅有缓存覆盖的日期参与，缺测日不填零；不同起报窗口的有效天数可能不同。':'模式为本地下载的0.25°历史预报（最近邻对应到0.01°实况格点），仅评深圳行政区内格点；缺资料的日子不补、不插值。'}</p>`;
   by('monthly-month').onchange=e=>loadMonth(e.target.value);
   by('monthly-controls').querySelectorAll('[data-window]').forEach(b=>b.onclick=()=>{state.window=b.dataset.window;controls();render();});
@@ -49,8 +49,29 @@ window.MonthlyPrecip=(()=>{
    status('');controls();render();
   }catch(e){if(my===seq)status(e.message,true);}
  }
+ const WIN_LABELS={d1:'前一日20时起报（预报其后0—24小时）',d1m:'前一日08时起报（预报其后12—36小时）'};  // 文字写全（用户 11-11 说「第1天」看不懂）
+ const winLabel=w=>WIN_LABELS[w.id]||w.label;
  const win=()=>data.windows.find(w=>w.id===state.window);
  const observationFor=w=>data.is_demo&&w.paired_obs?w.paired_obs:data.obs;
+ const RAIN_COLORS=['#d9f0d3','#a6dba0','#5aae61','#61a5d6','#2c6fb5','#f2c94c','#ee8a3c','#d7301f'];
+ function rainScale(w){
+  const vals=[];const add=a=>{for(const v of a||[])if(v!=null&&Number.isFinite(v))vals.push(v);};
+  add(observationFor(w).total_map);for(const m of state.models.filter(m=>w.models[m]))add(shown(w.models[m],'total_map'));
+  if(!vals.length)return RAIN;
+  let lo=Infinity,hi=-Infinity;for(const v of vals){if(v<lo)lo=v;if(v>hi)hi=v;}
+  let best=null;
+  for(const step of [1,2,5,10,20,25,50,100,200,500]){
+   const start=Math.floor(lo/step)*step,n=Math.ceil((hi-start)/step+1e-9)||1;
+   if(n>=6&&n<=8){best={step,start,n};break;}
+   if(n<6&&!best)best={step,start,n:Math.max(n,1)};
+   if(n<6)continue;
+  }
+  if(!best||best.n<6){const step=best?best.step:1;const start=best?best.start:Math.floor(lo);best={step,start,n:6};}
+  const idx=k=>Math.round(k*(RAIN_COLORS.length-1)/Math.max(best.n-1,1));
+  return Array.from({length:best.n},(_,k)=>[best.start+k*best.step,RAIN_COLORS[idx(k)]]);
+ }
+ const shown=(m,key)=>m[key+'_smooth']||m[key];  // 分布图用双线性插值后的场（没有就用原场）；评分不受影响
+ const hasSmooth=w=>state.models.some(m=>w.models[m]&&w.models[m].total_map_smooth);
  const colorOf=(v,scale)=>{let c=scale[0][1];for(const [t,col] of scale)if(v>=t)c=col;return c;};
  function drawMap(canvas,values,scale){
   const {nx,ny}=data.grid,s=4;canvas.width=nx*s;canvas.height=ny*s;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -90,12 +111,12 @@ window.MonthlyPrecip=(()=>{
   return `<table><thead><tr><th>日期（20–20时）</th><th>实况面雨量</th><th>实况格点最大</th>${models.map(m=>`<th>${esc(names[m]||m)} 面雨量</th><th>${esc(names[m]||m)} TS</th>`).join('')}</tr></thead><tbody>${observationFor(w).daily.map((d,i)=>`<tr><td>${d.day}</td><td>${fmt(d.mean,2)}</td><td>${fmt(d.max)}</td>${models.map(m=>{const x=w.models[m].daily[i];const sc=x.scores?.[th];return `<td>${fmt(x.mean,2)}</td><td>${sc&&(sc.H+sc.M+sc.F)?fmt(sc.TS,3):(sc?'无降水':'—')}</td>`;}).join('')}</tr>`).join('')}</tbody></table>`;
  }
  function render(){
-  if(!data)return;const w=win(),models=state.models.filter(m=>w.models[m]);
+  if(!data)return;const w=win(),models=state.models.filter(m=>w.models[m]),rain=rainScale(w);
   const missing=models.flatMap(m=>w.models[m].missing.map(x=>({...x,m})));
   by('monthly-results').hidden=false;
   by('monthly-results').innerHTML=`${stats(w)}
-   <section class="results monthly-block"><div class="result-heading"><div><h2>${demoMode?'已有日期累计降水分布':'月累计降水分布'} · ${esc(data.month)}</h2><p>${esc(w.label)} · 各模式只累计自身有资料的日子；偏差 = 模式 − 同期实况</p></div></div>
-    <div class="monthly-maps"><figure><canvas data-map="obs"></canvas><figcaption>实况</figcaption></figure>${models.map(m=>`<figure><canvas data-map="t:${esc(m)}"></canvas><figcaption>${esc(label(m))}</figcaption></figure>`).join('')}</div>${legend(RAIN,'mm')}
+   <section class="results monthly-block"><div class="result-heading"><div><h2>${demoMode?'已有日期累计降水分布':'月累计降水分布'} · ${esc(data.month)}</h2><p>${esc(winLabel(w))} · 各模式只累计自身有资料的日子；偏差 = 模式 − 同期实况${hasSmooth(w)?'。模式是0.25°格点资料，图上按双线性插值画成平滑分布，评分仍按最近格点计算':''}</p></div></div>
+    <div class="monthly-maps"><figure><canvas data-map="obs"></canvas><figcaption>实况</figcaption></figure>${models.map(m=>`<figure><canvas data-map="t:${esc(m)}"></canvas><figcaption>${esc(label(m))}</figcaption></figure>`).join('')}</div>${legend(rain,'mm')}
     <div class="monthly-maps">${models.map(m=>`<figure><canvas data-map="b:${esc(m)}"></canvas><figcaption>${esc(names[m]||m)} 偏差</figcaption></figure>`).join('')}</div>${legend(BIAS,'mm（负值偏少，正值偏多）',true)}</section>
    <section class="results monthly-block"><div class="result-heading"><div><h2>逐日面雨量</h2><p>灰柱为实况，折线为模式；悬停查看起报时刻。断线表示该日资料缺失。</p></div><button class="quiet" id="monthly-svg">导出图表 ↓</button></div>
     <div class="legend"><span><i style="background:#c9d6df"></i>实况</span>${models.map(m=>`<span><i style="background:${palette[m]}"></i>${esc(label(m))}</span>`).join('')}</div><div class="chart" id="monthly-daily">${dailyChart(w)}</div></section>
@@ -104,7 +125,7 @@ window.MonthlyPrecip=(()=>{
    <details class="case-detail" ${missing.length||data.obs_missing.length?'':'hidden'}><summary>缺资料日 · ${missing.length+data.obs_missing.length}条</summary><div class="table-scroll"><table><thead><tr><th>模式</th><th>日期</th><th>对应起报（BJT）</th><th>原因</th></tr></thead><tbody>${data.obs_missing.map(x=>`<tr><td>实况</td><td>${esc(x.day)}</td><td>—</td><td>${esc(x.reason)}</td></tr>`).join('')}${missing.map(x=>`<tr><td>${esc(names[x.m]||x.m)}</td><td>${esc(x.day)}</td><td>${esc(x.run_bjt)}</td><td>${esc(x.reason)}</td></tr>`).join('')}</tbody></table></div></details>
    <details class="case-detail"><summary>资料与检验口径</summary><div class="case-explain"><p>日界：${esc(data.day_definition)}。</p><p>实况：${esc(data.reference)}。</p><p>${esc(data.method)}</p><p>${demoMode?'模式来源：所有演示目标均使用 Google WeatherNext 3 原生0.1°集合均值，不是目标模式自身预报。':'模式来源：EC 为 ECMWF 开放数据 IFS 0.25°（3小时累计）；GFS 为 NOAA GFS 0.25°；AIGFS 为 NOAA AI 版 GFS 0.25°（6小时累计）。均只用 00/12 UTC 起报。'}</p><p>结果生成：${esc(String(data.generated).slice(0,16).replace('T',' '))} BJT。</p></div></details>`;
   by('monthly-results').querySelectorAll('canvas[data-map]').forEach(c=>{const k=c.dataset.map;
-   if(k==='obs')drawMap(c,observationFor(w).total_map,RAIN);else{const m=k.slice(2);drawMap(c,k[0]==='t'?w.models[m].total_map:w.models[m].bias_map,k[0]==='t'?RAIN:BIAS);}});
+   if(k==='obs')drawMap(c,observationFor(w).total_map,rain);else{const m=k.slice(2);drawMap(c,shown(w.models[m],k[0]==='t'?'total_map':'bias_map'),k[0]==='t'?rain:BIAS);}});
   by('monthly-csv').onclick=()=>exportCsv(w);by('monthly-svg').onclick=()=>save(by('monthly-daily').innerHTML,'image/svg+xml;charset=utf-8',`${demoMode?'WN3演示_':''}月降水逐日-${data.month}-${w.id}.svg`);
  }
  function save(content,type,name){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}

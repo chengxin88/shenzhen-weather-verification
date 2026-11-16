@@ -68,7 +68,7 @@ def metadata(client, raw):
             cached_download(client, url, raw / name)
 
 
-def ogimet(client, root, start, end, backfill=False):
+def ogimet(client, root, start, end, backfill=False, blocks=(45, 51, 52, 56, 57, 58, 59)):
     journal_path = root / 'ogimet-journal.json'
     journal = read_json(journal_path, {'requests': [], 'stopped': None})
     if journal.get('stopped'):
@@ -85,8 +85,8 @@ def ogimet(client, root, start, end, backfill=False):
         stop = min(cursor + timedelta(days=3), end.replace(second=0, microsecond=0))
         windows.append((cursor, stop)); cursor = stop
     for begin, stop in windows:
-        # The expanded western edge also intersects WMO block 56 (Yunnan).
-        for block in (56, 57, 58, 59):
+        # Block 45 is Hong Kong/Macau, 51/52 hold the Xinjiang stations, 56 reaches Yunnan on the western edge.
+        for block in blocks:
             params = dict(block=str(block), begin=begin.strftime('%Y%m%d%H%M'),
                           end=(stop - timedelta(minutes=1)).strftime('%Y%m%d%H%M'))
             key = f"{block}_{params['begin']}_{params['end']}"

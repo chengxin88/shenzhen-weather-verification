@@ -1,0 +1,16 @@
+{
+  "status": "pass",
+  "request": {},
+  "comparisons": {
+    "summary": {
+      "rows": 32,
+      "equal": true,
+      "sha256": "efb89f740d6f89b104872c4b0f48942f63b972836a56e4bdb2b521d90487e373"
+    },
+    "scores": {
+      "rows": 128,
+      "equal": true,
+      "sha256": "2ea9a14e1a0046a21df6d929230583fe494ce3ebefa82eba46aa4ec6c5f1a99b"
+    }
+  }
+}

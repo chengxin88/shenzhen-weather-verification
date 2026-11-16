@@ -32,11 +32,11 @@ BJT = timezone(timedelta(hours=8))
 MODEL = 'ECMWF-IFS-9km-OpenMeteo'
 SLUG = 'ecmwf_openmeteo'
 API = 'https://single-runs-api.open-meteo.com/v1/forecast'
-ROOT = Path(os.getenv('OPENMETEO_EC_ROOT', '/home/chengyang/openmeteo-ecmwf/cache'))
+ROOT = Path(os.getenv('OPENMETEO_EC_ROOT', '/home/yjzx/verification-platform/openmeteo-ecmwf/cache'))
 SCHEMA = 'openmeteo-ifs-exact-run-v1'
 # The bounding-box API returns original O1280 cells, including edge cells.
 BOUNDS = (113.6, 22.25, 114.8, 23.0)
-SEGMENTS = {'hourly': (0, 90, 1), 'three_hourly': (90, 144, 3), 'six_hourly': (144, 168, 6)}
+SEGMENTS = {'hourly': (0, 90, 1), 'three_hourly': (90, 144, 3), 'six_hourly': (144, 240, 6)}
 VARIABLES = {
     'temperature_2m': ('°C', -100, 70),
     'precipitation': ('mm', 0, 2000),
@@ -102,8 +102,9 @@ def atomic_json(path, value):
     atomic_bytes(path, json.dumps(value, ensure_ascii=False, allow_nan=False).encode())
 
 
-def parameters(run, segment):
-    start, end, interval = SEGMENTS[segment]
+def parameters(run, segment, end=None):
+    start, default_end, interval = SEGMENTS[segment]
+    end = default_end if end is None else end
     west, south, east, north = BOUNDS
     return dict(models='ecmwf_ifs', run=run_time(run).strftime('%Y-%m-%dT%H:%M'),
                 bounding_box=f'{south},{west},{north},{east}',
@@ -191,7 +192,7 @@ def acquire_segment(run, segment):
         url = API+'?'+urllib.parse.urlencode(params)
         session = requests.Session()
         session.trust_env = False
-        proxy = os.getenv('OPENMETEO_EC_PROXY', 'http://127.0.0.1:17908')
+        proxy = os.getenv('OPENMETEO_EC_PROXY', '')
         if proxy:
             session.proxies = {'http':proxy,'https':proxy}
         with session.get(url,headers={'User-Agent':'SZVerify-EC9km/1.0'},timeout=(10,60),stream=True) as response:
@@ -274,12 +275,12 @@ def load_segment(ident, segment, digest):
         arrays = {name: z[name] for name in VARIABLES}
     if (meta.get('schema') != SCHEMA or meta.get('model') != MODEL or meta.get('api_model') != 'ecmwf_ifs'
             or meta.get('endpoint') != API or meta.get('run') != iso(run_time(ident)) or meta.get('segment') != segment
-            or meta.get('parameters') != parameters(run_time(ident), segment) or meta.get('native_grid') != 'O1280'
+            or meta.get('parameters') not in (parameters(run_time(ident), segment), parameters(run_time(ident), segment, 168)) or meta.get('native_grid') != 'O1280'
             or meta.get('elevation_correction') is not False or meta.get('bounds') != list(BOUNDS)
             or meta.get('units') != {key: value[0] for key, value in VARIABLES.items()}):
         raise ValueError('Cached forecast provenance mismatch')
     start, end, interval = SEGMENTS[segment]
-    if (not np.array_equal(leads, np.arange(start, end+1, interval)) or points.ndim != 2 or points.shape[1] != 2
+    if (not (np.array_equal(leads, np.arange(start, end+1, interval)) or (segment == 'six_hourly' and np.array_equal(leads, np.arange(144, 169, 6)))) or points.ndim != 2 or points.shape[1] != 2
             or not 50 <= len(points) <= 300 or not np.isfinite(points).all()
             or any(a.shape != (len(leads), len(points)) for a in arrays.values())):
         raise ValueError('Cached forecast dimensions mismatch')
@@ -297,8 +298,8 @@ def segments(run):
 
 
 def native_step(lead):
-    if type(lead) is not int or not 0 <= lead <= 168:
-        raise ValueError('Forecast hour outside 0–168')
+    if type(lead) is not int or not 0 <= lead <= 240:
+        raise ValueError('Forecast hour outside 0–240')
     interval = 1 if lead <= 90 else 3 if lead <= 144 else 6
     if lead % interval:
         raise ValueError('Forecast hour is not an original model output time')

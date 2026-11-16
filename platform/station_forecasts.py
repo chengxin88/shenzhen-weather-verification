@@ -22,13 +22,13 @@ import time
 import zipfile
 import zlib
 import numpy as np
-from station_common import BOX, ROOT, UTC, VERSION, atomic_json, digest, iso, read_json, stamp, sync_directory
+from station_common import BOX, ROOT, RUN_DAYS, UTC, VERSION, atomic_json, digest, iso, read_json, stamp, sync_directory
 
-WEATHER = Path(os.environ.get('STATIONS_WEATHER_ROOT', '/home/chengyang/gods-eye-weather/weather-data'))
-PRODUCTION = Path(os.environ.get('STATIONS_NATIVE_ROOT', '/home/chengyang/verification-test'))
-OPENMETEO = Path('/home/chengyang/openmeteo-ecmwf')
+WEATHER = Path(os.environ.get('STATIONS_WEATHER_ROOT', '/home/yjzx/verification-platform/gods-eye-weather/weather-data'))
+PRODUCTION = Path(os.environ.get('STATIONS_NATIVE_ROOT', '/home/yjzx/verification-platform/verification-test'))
+OPENMETEO = Path('/home/yjzx/verification-platform/openmeteo-ecmwf')
 NATIVE = {'ecmwf': 'ECMWF-IFS', 'gfs': 'NCEP-GFS', 'aifs': 'ECMWF-AIFS',
-          'aigfs': 'NCEP-AIGFS', 'gefs': 'GEFS集合平均'}
+          'aigfs': 'NCEP-AIGFS', 'gefs': 'GEFS集合平均', 'ecens': 'ECMWF-ENSEMBLES平均'}
 FIELDS = ('surface_t', 'surface_rh', 'surface_u', 'surface_v', 'surface_msl',
           'rain3h', 'rain6h', 'orography', 'surface_elevation')
 WORKERS=max(1,min(32,int(os.environ.get('STATIONS_SAMPLE_WORKERS','32'))))
@@ -122,8 +122,9 @@ def discover(root, end):
     and the published catalog. No repeated globs of the slow USB directories.
     """
     path = root / 'discovery.json'; saved = read_json(path, {'directories': {}})
-    groups = defaultdict(dict); cutoff = end - timedelta(days=38)
-    roots = [WEATHER / 'region-v4', PRODUCTION / 'cache/native-backfill', ROOT / 'cache/native-backfill']
+    groups = defaultdict(dict); cutoff = end - timedelta(days=RUN_DAYS)
+    # The first root holding a frame wins, and the southern backfill replaces narrower copies of the same frame.
+    roots = [ROOT / 'cache/native-backfill-south', WEATHER / 'region-v4', PRODUCTION / 'cache/native-backfill', ROOT / 'cache/native-backfill']
     seen_roots = set()
     bootstrap = defaultdict(set)
     if not saved['directories']:
@@ -134,7 +135,7 @@ def discover(root, end):
         if index.is_file():
             with index.open('rb') as handle:
                 content = handle.read()
-            pattern = rb'"(/[^"\\]+/(?:ecmwf|gfs|aifs|aigfs|gefs)_\d{10}_f\d{3}(?:_global1)?\.json)"\s*:'
+            pattern = rb'"(/[^"\\]+/(?:ecmwf|gfs|aifs|aigfs|gefs|ecens)_\d{10}_f\d{3}(?:_global1)?\.json)"\s*:'
             for match in re.finditer(pattern, content):
                 file = Path(match[1].decode('utf-8'))
                 bootstrap[str(file.parent)].add(file.name)
@@ -163,7 +164,7 @@ def discover(root, end):
                 run = datetime.strptime(run_id, '%Y%m%d%H').replace(tzinfo=UTC)
                 if run < end - timedelta(days=2):
                     continue
-                names.update(f'{slug}_{run_id}_f{lead:03}_global1.json' for lead in range(0, 169, 3))
+                names.update(f'{slug}_{run_id}_f{lead:03}_global1.json' for lead in range(0, 241, 3))
             retained = []
             for name in sorted(names):
                 match = re.fullmatch(slug + r'_(\d{10})_f(\d{3})(_global1)?\.json', name)
@@ -171,7 +172,7 @@ def discover(root, end):
                     continue
                 run = datetime.strptime(match[1], '%Y%m%d%H').replace(tzinfo=UTC)
                 lead = int(match[2])
-                if run < cutoff or lead > 168 or run > end:
+                if run < cutoff or lead > 240 or run > end:
                     continue
                 retained.append(name)
                 file = directory / name
@@ -195,9 +196,10 @@ def read_native_frame(path, slug, run, lead, targets, metadata=None):
         # Apply the same certified storage/grid checks without loading the old
         # cropped T/rain arrays and then reopening those files for station data.
         storage = d.get('storage', '')
-        if storage not in (na.GLOBAL_STORAGE[slug], slug+'-regional-v1') or d.get('native_grid_degrees') != .25:
+        if storage not in (na.GLOBAL_STORAGE.get(slug), slug+'-regional-v1') or d.get('native_grid_degrees') != .25:
             raise ValueError('本地全球归档元数据不匹配')
-        expected = ((49,37) if d.get('bounds') == [108.,18.,120.,27.] else (361,241)) if storage.endswith('-regional-v1') else (1441,721)
+        expected = ({(108.,18.,120.,27.):(49,37),(104.,18.,121.,27.):(69,37),(97.,18.,123.,33.):(105,61)}.get(tuple(d.get('bounds') or ()),(361,241))
+                    if storage.endswith('-regional-v1') else (1441,721))
         if ((len(x),len(y)) != expected or (storage.endswith('-regional-v1') and
                 not np.allclose([x[0],y[0],x[-1],y[-1]],d.get('bounds',[]),atol=1e-7,rtol=0))):
             raise ValueError('本地区域归档网格不匹配')
@@ -221,6 +223,9 @@ def read_native_frame(path, slug, run, lead, targets, metadata=None):
             result['msl']=interpolate(msl,x,y,targets)
         if t is not None and rh is not None:
             result['td'] = interpolate_dewpoint(t, rh, x, y, targets)
+        td = field('surface_td') if slug == 'ecens' else None   # EC ENS: mean of member 2 m dew points
+        if td is not None and 'td' not in result:
+            result['td'] = interpolate(td, x, y, targets)
         u, v = field('surface_u'), field('surface_v')
         if u is not None and v is not None:
             result['wind'] = np.hypot(interpolate(u, x, y, targets), interpolate(v, x, y, targets))
@@ -287,7 +292,8 @@ def native_signature(path,saved=None):
                      - max(namespace[2:]) > 2_000_000_000))
         old_fields = dict(saved.get('field_stats',[])) if same else {}
         field_stats = [[name,None if name in old_fields and old_fields[name] is None
-                        else file_signature(fields/(name+'.npy'))] for name in FIELDS]
+                        else file_signature(fields/(name+'.npy'))]
+                       for name in FIELDS + (('surface_td',) if path.name.startswith('ecens_') else ())]
         if saved is not None:
             saved.update(field_directory=str(fields),field_namespace=namespace,field_stats=field_stats,
                          field_checked_at_ns=saved.get('field_checked_at_ns',0) if same else time.time_ns())
@@ -357,7 +363,7 @@ def regional_series(reg, ident, data, name, wanted, target, nearest=False):
     from scipy.interpolate import RegularGridInterpolator
     path = reg.directory(ident) / (name + '.npy'); out = {}
     lat, lon = np.asarray(reg.LAT), np.asarray(reg.LON)
-    shape = (len(reg.expected_leads(ident)), len(lat), len(lon))
+    shape = (len(data['leads']), len(lat), len(lon))
     points = np.asarray(target, dtype=float)
     r0 = max(0, int(np.searchsorted(lat, points[:, 1].min())) - 2); r1 = min(len(lat), int(np.searchsorted(lat, points[:, 1].max())) + 2)
     c0 = max(0, int(np.searchsorted(lon, points[:, 0].min())) - 2); c1 = min(len(lon), int(np.searchsorted(lon, points[:, 0].max())) + 2)
@@ -410,7 +416,7 @@ class SamplePlan(Mapping):
 def forecast_runs(root, stations, end, lazy=False, timings=None):
     """Discover source identities first; sample only a run that needs pairing.
 
-    Source identities cover all committed <=168h leads, independent of the
+    Source identities cover all committed <=240h leads, independent of the
     scoring window. Advancing end therefore changes observation digests, not
     the forecast identity. Old window-dependent identities are used solely for
     exact migration of jobs and pre-existing station sample caches.
@@ -613,12 +619,16 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
         samples.precip_metadata = source_cache
         yield slug,run,samples if lazy else samples.load(set(samples)),sig,issues
 
+    from nmic_ec01 import LEADS as POINT_LEADS, merge_samples, read_points, supplement_path
+    point_runs = {p.name.split('_')[1].split('.')[0]: p for p in out.glob('ec01_??????????.nmic.npz')}
+    seen_ec01 = set()
     reg = regional()
-    for directory in sorted(reg.root().iterdir()):
+    for directory in sorted(reg.root().iterdir()) if reg.root().is_dir() else []:
         if not re.fullmatch(r'\d{10}',directory.name) or not (directory/'run.json').is_file():continue
         run = datetime.strptime(directory.name,'%Y%m%d%H').replace(tzinfo=UTC)
-        if not end-timedelta(days=38) <= run <= end:continue
+        if not end-timedelta(days=RUN_DAYS) <= run <= end:continue
         key='ec01_'+directory.name; issues=[]
+        seen_ec01.add(directory.name)
         try:
             manifest=reg.manifest(directory.name)
             precip_meta=manifest['fields']['precipitation']; source_times=set(precip_meta.get('source_times',[]))
@@ -626,7 +636,12 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
                 raise ValueError('Regional precipitation source time axis/unit mismatch')
             names=['temperature_2m','dew_point_2m','pressure_msl','wind_u_component_10m','wind_v_component_10m','precipitation']
             signatures=[[name,file_signature(directory/(name+'.npy')),manifest['fields'][name]['sha256']] for name in names]
-            active=[h for h in manifest['leads'] if end-timedelta(days=32)<=run+timedelta(hours=h)<=end]
+            ext_file=out/(key+'.extended.npz')
+            ext_leads=list(range(174,241,6)) if ext_file.is_file() and run.hour in (0,12) else []
+            point_file = supplement_path(root, directory.name)
+            point_sig = file_signature(point_file)
+            point_leads = POINT_LEADS if point_sig else ()
+            active=[h for h in sorted(set(manifest['leads'])|set(ext_leads)|set(point_leads)) if end-timedelta(days=32)<=run+timedelta(hours=h)<=end]
             sig=digest([VERSION,station_sig,manifest,signatures])
             legacy_sig=digest([VERSION,station_sig,manifest,signatures,active])
             # Six shared series reads, restricted to needed leads, rather than
@@ -634,12 +649,41 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
             file=out/(key+'.npz'); state_path=out/(key+'.sample-state.json')
             if file.is_file() and not state_path.is_file() and memo.get(key)==legacy_sig:
                 atomic_json(state_path,dict(version=VERSION,station_signature=station_sig,source=sig,sample_file_signature=file_signature(file)))
-            def load(needed):
+            def load(needed,ext_file=ext_file):
                 state,embedded=sample_state(file,state_path)
                 trusted=(state.get('version')==VERSION and state.get('station_signature')==station_sig and state.get('source')==sig
                          and (embedded or state.get('sample_file_signature')==file_signature(file)))
-                old=load_samples(file) if file.is_file() and (trusted or (not state and memo.get(key)==legacy_sig)) else {}
-                missing=needed-old.keys()
+                migration = remapping(state)
+                previous_sig = digest([VERSION,state.get('station_signature'),manifest,signatures])
+                reusable = migration is not None and state.get('source') == previous_sig
+                old=cached_samples(file) if file.is_file() and (trusted or reusable or (not state and memo.get(key)==legacy_sig)) else {}
+                if reusable:
+                    # Re-sampling the grid populates added points, but retain
+                    # the certified doubles for old points exactly.
+                    retained = old
+                    old = {}
+                else:
+                    retained = {}
+                if ext_file.is_file():
+                    ext_state, _ = sample_state(ext_file, ext_file.with_suffix('.sample-state.json'))
+                    ext_values = cached_samples(ext_file) if ext_state.get('station_signature') else load_samples(ext_file)
+                    if not ext_state and previous_points and previous_points != points:
+                        # Legacy extended files have no certificate. The last
+                        # published roster supplies their point order; never
+                        # infer alignment from the new array length alone.
+                        indices = [destinations.get(tuple(p)) for p in previous_points]
+                        for ev in ext_values.values():
+                            for name,array in list(ev.items()):
+                                if name == 'rain_start':continue
+                                expanded = np.full(len(points),np.nan)
+                                if np.shape(array) == (len(indices),):
+                                    for i,dest in enumerate(indices):
+                                        if dest is not None:expanded[dest] = array[i]
+                                ev[name] = expanded
+                    for eh,ev in ext_values.items():
+                        if eh not in old and len(ev.get('t',()))==len(target) and (not ext_state or
+                                ext_state.get('station_signature') == station_sig or remapping(ext_state) is not None):old[eh]=ev
+                missing=(needed-old.keys())&set(manifest['leads'])
                 print('SAMPLES',key,len(needed),'loaded_leads',len(missing),'sampled_leads',flush=True)
                 if missing:
                     with ThreadPoolExecutor(max_workers=len(names)) as pool:
@@ -649,26 +693,46 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
                                     wind=np.hypot(series['wind_u_component_10m'][lead],series['wind_v_component_10m'][lead]))
                         if lead:values.update(rain=series['precipitation'][lead],rain_start=lead-reg.ec.native_step(lead))
                         old[lead]=values
+                    # A roster change must not re-round/recompute old values.
+                    old = merge_samples(retained, old)
+                    save_samples(file,sorted(old),old,state=dict(state,version=VERSION,station_signature=station_sig,source=sig))
+                elif reusable:
+                    old = merge_samples(retained, old)
                     save_samples(file,sorted(old),old,state=dict(state,version=VERSION,station_signature=station_sig,source=sig))
                 if file.is_file():atomic_json(state_path,dict(version=VERSION,station_signature=station_sig,source=sig,sample_file_signature=file_signature(file)))
                 reg.field_file.cache_clear()
-                return {h:old[h] for h in needed}
+                if point_sig:
+                    old = merge_samples(old, read_points(point_file, stations, needed))
+                return {h:old[h] for h in needed if h in old}
             samples = SamplePlan(active,legacy_sig,load,file)
-            yield 'ec01',run,samples if lazy else samples.load(set(samples)),sig,issues
+            source_sig = digest([sig,file_signature(ext_file)]) if ext_file.is_file() else sig
+            if point_sig:source_sig = digest([source_sig,point_sig])
+            yield 'ec01',run,samples if lazy else samples.load(set(samples)),source_sig,issues
         except (OSError,ValueError,KeyError) as exc:
             yield 'ec01',run,{},digest([VERSION,str(exc)]),[['ec01',iso(run),None,str(exc)]]
         finally:reg.field_file.cache_clear()
+
+    # Archived point supplements still work after the much larger regional
+    # fields have rolled off. No download can be triggered by this reader.
+    for ident, point_file in sorted(point_runs.items()):
+        if ident in seen_ec01:continue
+        run = datetime.strptime(ident,'%Y%m%d%H').replace(tzinfo=UTC)
+        if not end-timedelta(days=RUN_DAYS) <= run <= end:continue
+        active = [h for h in POINT_LEADS if end-timedelta(days=32) <= run+timedelta(hours=h) <= end]
+        sig = digest([VERSION,station_sig,file_signature(point_file)])
+        samples = SamplePlan(active,sig,lambda needed,p=point_file:read_points(p,stations,needed))
+        yield 'ec01',run,samples if lazy else samples.load(set(samples)),sig,[]
 
     na=native();wnroot=WEATHER/'region-v4/weathernext3'
     for path in sorted(union_glob(wnroot,'run_??????????.json')):
         issues=[]
         try:
             run,directory,committed=na.wn3_manifest(path)
-            if not end-timedelta(days=38)<=run<=end:continue
-            all_leads=sorted(h for h in committed if h<=168)
+            if not end-timedelta(days=RUN_DAYS)<=run<=end:continue
+            all_leads=sorted(h for h in committed if h<=240)
             active=[h for h in all_leads if end-timedelta(days=32)<=run+timedelta(hours=h)<=end]
             key='wn3_'+run.strftime('%Y%m%d%H')
-            entries=[(h,name,wnroot/directory/run.strftime('%Y%m%d%H')/f'f{h:03}_{name}.npz') for h in all_leads for name in ('surface_t','rain1h')]
+            entries=[(h,name,wnroot/directory/run.strftime('%Y%m%d%H')/f'f{h:03}_{name}.npz') for h in all_leads for name in ('surface_t','station_t','rain1h')]
             with ThreadPoolExecutor(max_workers=WORKERS) as pool:
                 signatures=[[h,name,stat] for (h,name,_),stat in zip(entries,pool.map(file_signature,(s[2] for s in entries)))]
             manifest=read_json(read_path(path))
@@ -678,13 +742,31 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
             per_lead={h:[manifest_sig,[s for s in signatures if s[0]==h],list(BOX)] for h in all_leads}
             def sample_one(lead):
                 values={};errors=[]
-                for variable,name in [('t','surface_t'),('rain','rain1h')]:
+                # Temperature is WN3's station-calibrated 0.05 degree field, taken at the nearest cell as WN3 publishes it
+                # for stations; the plain 0.1 degree field stands in only where that file is missing or unreadable.
+                for variable,name in [('t','station_t'),('t','surface_t'),('td','surface_td'),('msl','surface_msl'),('rain','rain1h')]:
                     source=read_path(wnroot/directory/run.strftime('%Y%m%d%H')/f'f{lead:03}_{name}.npz')
-                    if not source.is_file():continue
+                    if variable in values or not source.is_file():continue
                     try:
                         x,y,array=na.load_wn3_field(source,run,lead,name,directory)
-                        values[variable]=interpolate(array,x,y,target,nearest=variable=='rain')
+                        values[variable]=interpolate(array,x,y,target,nearest=name in ('rain1h','station_t'))
                         if variable=='rain':values['rain_start']=lead-1
+                    except na.WN3_ERRORS as exc:errors.append(['wn3',iso(run),lead,str(exc)])
+                # Runs from before surface_ws existed fall back to the speed of the mean wind.
+                speed=read_path(wnroot/directory/run.strftime('%Y%m%d%H')/f'f{lead:03}_surface_ws.npz')
+                if speed.is_file():
+                    try:
+                        x,y,array=na.load_wn3_field(speed,run,lead,'surface_ws',directory)
+                        values['wind']=interpolate(array,x,y,target)
+                    except na.WN3_ERRORS as exc:errors.append(['wn3',iso(run),lead,str(exc)])
+                    return lead,values,errors
+                u_source=read_path(wnroot/directory/run.strftime('%Y%m%d%H')/f'f{lead:03}_surface_u.npz')
+                v_source=read_path(wnroot/directory/run.strftime('%Y%m%d%H')/f'f{lead:03}_surface_v.npz')
+                if u_source.is_file() and v_source.is_file():
+                    try:
+                        ux,uy,u_arr=na.load_wn3_field(u_source,run,lead,'surface_u',directory)
+                        vx,vy,v_arr=na.load_wn3_field(v_source,run,lead,'surface_v',directory)
+                        values['wind']=np.hypot(interpolate(u_arr,ux,uy,target),interpolate(v_arr,vx,vy,target))
                     except na.WN3_ERRORS as exc:errors.append(['wn3',iso(run),lead,str(exc)])
                 return lead,values,errors
             old_state,_ = sample_state(out/(key+'.npz'),out/(key+'.sample-state.json'))
@@ -693,3 +775,24 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
             yield 'wn3',run,samples if lazy else samples.load(set(samples)),sig,issues
         except na.WN3_ERRORS as exc:
             yield 'wn3',None,{},'', [['wn3',path.name,None,str(exc)]]
+
+    # Spark's WN3 crop stops at 35 N, so Xinjiang arrives as point values from deploy/pull_wn3_xj.py.
+    index = {s['id']:i for i,s in enumerate(stations)}
+    # wn3ml is the wind correction trained on these stations, computed by deploy/wn3_xj_corrected.py.
+    for job,path in [(job,path) for job,folder in (('wn3xj','wn3-xj'),('wn3ml','wn3ml')) for path in sorted((root/folder).glob('??????????.npz'))]:
+        run = datetime.strptime(path.stem,'%Y%m%d%H').replace(tzinfo=UTC)
+        if not end-timedelta(days=RUN_DAYS) <= run <= end:continue
+        with np.load(path,allow_pickle=False) as data:
+            ids = [str(v) for v in data['ids']]; leads = [int(v) for v in data['leads']]
+            fields = {k:data[k] for k in data.files if k in ('t','td','msl','wind','rain')}
+        slots = [(index[v],j) for j,v in enumerate(ids) if v in index]
+        if not slots:continue
+        samples = {}
+        for k,lead in enumerate(leads):
+            values = {}
+            for name,array in fields.items():
+                values[name] = np.full(len(stations),np.nan)
+                for i,j in slots:values[name][i] = array[k,j]
+            if 'rain' in values:values['rain_start'] = lead-1
+            samples[lead] = values
+        yield job,run,samples,digest([VERSION,station_sig,file_signature(path)]),[]

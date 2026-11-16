@@ -4,31 +4,40 @@ Forecast acquisition is never triggered here. ERA5 uses existing daily GRIBs.
 GDAS requests only five regional surface fields, capped at 128 KiB per cycle.
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
+from wn3_storage import relative, logical_path, file_stat, read_text, open_read, load_array, read_path, union_glob
+
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import fcntl, json, os, re, sys, threading, time
 import sys
-if '/home/chengyang/gods-eye-weather/weather_backend' not in sys.path:sys.path.append('/home/chengyang/gods-eye-weather/weather_backend')
+if '/home/yjzx/verification-platform/gods-eye-weather/weather_backend' not in sys.path:sys.path.append(str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
 from global_store import field_directory
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
 HERE = Path(__file__).resolve().parent
-WEATHER = Path('/home/chengyang/gods-eye-weather/weather-data')
+WEATHER = Path('/home/yjzx/verification-platform/gods-eye-weather/weather-data')
 CACHE = HERE / 'cache' / 'analysis-verification'
 UTC = timezone.utc
 BJT = timezone(timedelta(hours=8))
 BOUNDS = (108., 18., 120., 27.)
 LEVELS = (925, 850, 700, 500, 300, 200)
-LEADS = tuple(range(169))
+LEADS = tuple(range(241))
 WN3 = 'Google WeatherNext 3（集合均值）'
 MODELS = ('ECMWF-IFS', 'NCEP-GFS', WN3)
-APP_CACHE = Path('/home/chengyang/ec-gfs-server/cache')
+APP_CACHE = Path('/home/yjzx/verification-platform/ec-gfs-server/cache')
 NATIVE_MODELS = {'ecmwf':('ECMWF-IFS','ECMWF-IFS'), 'gfs':('NCEP-GFS','NCEP-GFS'),
                  'aifs':('ECAI','ECMWF-AIFS'), 'aigfs':('GFSAI','NCEP-AIGFS'),
-                 'gefs':('GEFS集合平均','GEFS集合平均')}  # GEFS frames live in cache/native-backfill (test-platform data)
-SURFACE_MODELS = ('ECMWF-IFS','ECAI','NCEP-GFS','GFSAI','GEFS集合平均',WN3)
-PRESSURE_MODELS = ('ECMWF-IFS','ECAI','ECMWF-ENSEMBLES平均','NCEP-GFS','GFSAI','Google WeatherNext 2',WN3)
+                 'gefs':('GEFS集合平均','GEFS集合平均'),
+                 'ecens':('ECMWF-ENSEMBLES平均','ECMWF-ENSEMBLES平均')}  # GEFS/EC ENS frames live in cache/native-backfill (test-platform data)
+SURFACE_MODELS = ('ECMWF-IFS','ECAI','ECMWF-ENSEMBLES平均','NCEP-GFS','GFSAI','GEFS集合平均',WN3)
+PRESSURE_MODELS = ('ECMWF-IFS','ECAI','ECMWF-ENSEMBLES平均','NCEP-GFS','GFSAI','GEFS集合平均','Google WeatherNext 2',WN3)
+# WN3 64-member mean pressure levels (daily GCS job); old runs are moved D -> G.
+WN3_LEVEL_ROOTS = (Path('/home/yjzx/verification-platform/wn3-levels'),Path('/home/yjzx/verification-platform/wn3-levels-archive'))
+GEFS_LEVEL_ROOT = Path(__file__).resolve().parent/'cache/native-backfill/gefs-levels'
+ENSEMBLE_LEVEL_RUN_HOURS = (0,12)  # 环流检验的集合预报只评 00Z/12Z 起报，与 WN3 高空资料一致
 SPECS = {'mslp': ('海平面气压', ('mslp',), 'hPa', None),
          'wind10': ('10 米风场', ('u10', 'v10'), 'm/s', 10),
          'wind100': ('100 米风场', ('u100', 'v100'), 'm/s', 100)}
@@ -41,9 +50,13 @@ def stamp(value): return datetime.fromisoformat(value.replace('Z', '+00:00'))
 def iso(value): return value.astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
 def bjt(value): return value.astimezone(BJT).isoformat()[:19]
 def signature(path):
-    if not path.is_file(): return None
-    s = path.stat()
-    return [str(path), s.st_mtime_ns, s.st_size]
+    try: s = file_stat(read_path(path))
+    except FileNotFoundError: return None
+    rel = relative(path)
+    # Preserve the pre-migration memo identity (the configured logical HOME
+    # archive name), avoiding a one-time G history reread at deployment too.
+    logical = WEATHER/'region-v4/weathernext3'/rel if rel is not None else path
+    return [str(logical), s.st_mtime_ns, s.st_size]
 
 def atomic_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -118,7 +131,7 @@ def prepare_era5(valids):
         for valid in targets:
             p = CACHE/'references'/f'era5_{valid:%Y%m%d%H}.npz'
             try:
-                with np.load(p,allow_pickle=False) as z: current = json.loads(str(z['meta']))
+                with load_array(p,allow_pickle=False) as z: current = json.loads(str(z['meta']))
                 if current.get('version') == VERSION and current.get('inputs') == inputs: continue
             except (OSError,ValueError,KeyError): pass
             needed.add(valid)
@@ -163,7 +176,7 @@ def fetch_gdas(valids, limit):
     try: attempts = json.loads(attempts_path.read_text())
     except (OSError,ValueError): attempts = {}
     session = requests.Session(); session.trust_env = False
-    proxy = os.getenv('ANALYSIS_REFERENCE_PROXY','http://127.0.0.1:17908')
+    proxy = os.getenv('ANALYSIS_REFERENCE_PROXY','')
     if proxy: session.proxies={'https':proxy}
     count = total = 0
     for valid in sorted(valids,reverse=True):
@@ -196,14 +209,14 @@ def candidates(now):
     from native_archive import wn3_manifest
     found = []
     for slug,(model,file_model) in NATIVE_MODELS.items():
-        frames = Path(__file__).resolve().parent/'cache/native-backfill'/slug if slug == 'gefs' else WEATHER/'region-v4'/slug
+        frames = Path(__file__).resolve().parent/'cache/native-backfill'/slug if slug in ('gefs','ecens') else WEATHER/'region-v4'/slug
         for path in sorted(frames.glob(f'{slug}_??????????_f???_global1.json')):
             match = re.fullmatch(slug+r'_(\d{10})_f(\d{3})_global1.json',path.name)
             run = datetime.strptime(match[1],'%Y%m%d%H').replace(tzinfo=UTC); lead=int(match[2]); valid=run+timedelta(hours=lead)
             if lead in LEADS and now-timedelta(days=31)<=valid<=now-timedelta(hours=6):
                 found.append(dict(path=path,model=model,file_model=file_model,run=run,lead=lead,valid=valid,slug=slug))
     root = WEATHER/'region-v4/weathernext3'
-    for path in sorted(root.glob('run_??????????.json')):
+    for path in sorted(union_glob(root,'run_??????????.json')):
         try: run,directory,committed = wn3_manifest(path)
         except Exception: continue
         for lead in LEADS:
@@ -218,7 +231,7 @@ def candidates(now):
         for directory in sorted(archive.glob('??????????')):
             if not re.fullmatch(r'\d{10}',directory.name):continue
             run=datetime.strptime(directory.name,'%Y%m%d%H').replace(tzinfo=UTC)
-            if not now-timedelta(days=34)<=run<=now:continue
+            if not now-timedelta(days=34)<=run<=now or ensemble and run.hour not in ENSEMBLE_LEVEL_RUN_HOURS:continue
             paths=(directory/'maps').glob('ensemble_circulation_f*_*.npz') if ensemble else directory.glob('*hPa_f*.grib2')
             for path in sorted(paths):
                 pattern=r'ensemble_circulation_f(\d{3})_(\d+)hPa\.npz' if ensemble else r'(\d+)hPa_f(\d{3})\.grib2'
@@ -229,6 +242,24 @@ def candidates(now):
                 if level in LEVELS and lead in LEADS and now-timedelta(days=31)<=valid<=now-timedelta(hours=6):
                     found.append(dict(path=path,model=model,run=run,lead=lead,valid=valid,level=level,
                                       archive='ensemble' if ensemble else 'ai-grib'))
+    # Pressure-level archives. Each frame holds every level, one job per level.
+    def add_levels(path,model,run,lead,archive):
+        valid=run+timedelta(hours=lead)
+        if lead in LEADS and now-timedelta(days=31)<=valid<=now-timedelta(hours=6):
+            found.extend(dict(path=path,model=model,run=run,lead=lead,valid=valid,level=level,archive=archive) for level in LEVELS)
+    seen=set()
+    for root in WN3_LEVEL_ROOTS:
+        for directory in sorted(root.glob('????????_??hr_01_preds')):
+            match=re.fullmatch(r'(\d{8})_(\d{2})hr_01_preds',directory.name)
+            if not match or directory.name in seen:continue
+            run=datetime.strptime(match[1]+match[2],'%Y%m%d%H').replace(tzinfo=UTC)
+            if run<now-timedelta(days=42):continue
+            seen.add(directory.name)
+            for path in sorted(directory.glob('lead_???h.npz')):
+                add_levels(path,WN3,run,int(path.name[5:8]),'wn3-levels')
+    for path in sorted(GEFS_LEVEL_ROOT.glob('gefs_levels_??????????_f???.npz')):
+        match=re.fullmatch(r'gefs_levels_(\d{10})_f(\d{3})\.npz',path.name)
+        if match and int(match[1][8:]) in ENSEMBLE_LEVEL_RUN_HOURS:add_levels(path,'GEFS集合平均',datetime.strptime(match[1],'%Y%m%d%H').replace(tzinfo=UTC),int(match[2]),'gefs-levels')
     return found
 
 def forecast_keys(element,level):
@@ -242,19 +273,46 @@ def input_paths(candidate,element,level):
     root=p.parent;run=candidate['run'].strftime('%Y%m%d%H')
     paths=[p]+[root/candidate['directory']/run/f"f{candidate['lead']:03}_{key}.npz" for key in keys]
     if element=='wind100': paths.append(root/'native-extras-v1'/f'run_{run}.json')
-    return paths
+    return [read_path(q) for q in paths]
+
+def level_archive_forecast(candidate,level):
+    """Height/wind for one level from a WN3 or GEFS multi-level frame, cropped to the scoring box."""
+    p=candidate['path'];wn3=candidate['archive']=='wn3-levels'
+    with np.load(p,allow_pickle=False) as z:
+        if int(z['lead_h'])!=candidate['lead']:raise ValueError('Level frame lead mismatch')
+        if wn3:
+            if str(z['run'])!=candidate['run'].strftime('%Y%m%d_%Hhr_01_preds') or p.parent.name!=str(z['run']):raise ValueError('WN3 level run mismatch')
+            if not {'scalar:gpm','u:m/s','v:m/s'}<=set(map(str,z['units'])) or int(z['n_members'])<2:raise ValueError('WN3 level units/members mismatch')
+            names=('scalar','u','v')
+        else:
+            if str(z['run'])!=candidate['run'].strftime('%Y%m%d%H'):raise ValueError('GEFS level run mismatch')
+            names=('gh','u','v')
+        levels=[int(v) for v in z['levels_hpa']]
+        if level not in levels:raise ValueError('Level missing from frame')
+        index=levels.index(level);x,y=np.asarray(z['lon'],float),np.asarray(z['lat'],float)
+        if np.any(np.diff(x)<=0) or np.any(np.diff(y)<=0) or x[0]>BOUNDS[0] or x[-1]<BOUNDS[2] or y[0]>BOUNDS[1] or y[-1]<BOUNDS[3]:raise ValueError('Level grid mismatch')
+        ix=np.flatnonzero((x>=BOUNDS[0]-1)&(x<=BOUNDS[2]+1));iy=np.flatnonzero((y>=BOUNDS[1]-1)&(y<=BOUNDS[3]+1))
+        arrays=[]
+        for name in names:
+            field=z[name]
+            if field.shape!=(len(levels),len(y),len(x)):raise ValueError('Level field shape mismatch')
+            arrays.append(np.asarray(field[index][np.ix_(iy,ix)],float))
+    low,high={925:(500,1100),850:(1100,1800),700:(2600,3400),500:(5000,6100),300:(8500,10000),200:(11000,13000)}[level]
+    if not (low<=np.nanmin(arrays[0]) and np.nanmax(arrays[0])<=high):raise ValueError('Level height out of range')
+    return x[ix],y[iy],arrays
 
 def archive_forecast(candidate,level):
     """Read only trusted local files, checking time/level/units in AI GRIBs."""
     p=candidate['path']
     if level!=candidate['level']:raise ValueError('Archive pressure level mismatch')
     if candidate['valid']!=candidate['run']+timedelta(hours=candidate['lead']):raise ValueError('Archive valid time mismatch')
+    if candidate['archive'] in ('wn3-levels','gefs-levels'):return level_archive_forecast(candidate,level)
     if candidate['archive']=='ensemble':
         expected=APP_CACHE/'ECMWF-ENSEMBLES'/candidate['run'].strftime('%Y%m%d%H')/'maps'/f"ensemble_circulation_f{candidate['lead']:03d}_{level}hPa.npz"
         if p!=expected:raise ValueError('Ensemble cache identity mismatch')
         # This app-owned cache is produced by ecmwf_ensembles.py from 50
         # perturbation members; its run/lead identity is encoded in the path.
-        with np.load(p,allow_pickle=False) as z:
+        with load_array(p,allow_pickle=False) as z:
             if not {'lon','lat','gh','t','u','v','height_spread'}<=set(z.files):raise ValueError('Ensemble cache incomplete')
             x,y=np.asarray(z['lon'],float),np.asarray(z['lat'],float)
             if x.ndim!=1 or y.ndim!=1:raise ValueError('Ensemble grid axes mismatch')
@@ -308,7 +366,7 @@ def forecast(candidate, element, level):
     if candidate['model']==WN3:
         if level is not None: raise ValueError('WN3 pressure fields not connected')
         from native_archive import WN3_SOURCES
-        sys.path[:0]=[s for s in ['/home/chengyang/gods-eye-weather/weather_backend','/home/chengyang/ec-gfs-server'] if s not in sys.path]
+        sys.path[:0]=[s for s in [str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'),str(Path(__file__).resolve().parents[1]/'ec-gfs-server')] if s not in sys.path]
         from weathernext3_native_cache import china_field,extra_available,VARIABLES
         if element=='wind100' and not extra_available(p.parent,candidate['run'],candidate['lead']): raise ValueError('100m hour not committed')
         schema,bounds=WN3_SOURCES[candidate['directory']]
@@ -316,20 +374,20 @@ def forecast(candidate, element, level):
             result=china_field(p.parent,candidate['run'],candidate['lead'],key,BOUNDS,native_bounds=bounds,directory=candidate['directory'],schema=schema)
             if result is None: raise ValueError('Missing native field')
             path=p.parent/candidate['directory']/candidate['run'].strftime('%Y%m%d%H')/f"f{candidate['lead']:03}_{key}.npz"
-            with np.load(path,allow_pickle=False) as z: meta=json.loads(str(z['meta']))
+            with load_array(path,allow_pickle=False) as z: meta=json.loads(str(z['meta']))
             if meta.get('source_variable')!=VARIABLES[key][0] or not re.fullmatch('[0-9a-f]{64}',str(meta.get('source_sha256',''))): raise ValueError('WN3 provenance mismatch')
             lon,lat,a=result;arrays.append(a)
     else:
-        d=json.loads(p.read_text())
+        d=json.loads(read_text(p))
         if (d.get('schema')!=2 or d.get('model')!=candidate.get('file_model',candidate['model']) or d.get('storage') not in (candidate['slug']+'-global-v1',candidate['slug']+'-regional-v1')
             or stamp(d['run'])!=candidate['run'] or stamp(d['valid'])!=candidate['valid'] or d.get('lead')!=candidate['lead']
             or d.get('native_grid_degrees')!=.25): raise ValueError('Forecast identity mismatch')
         x,y=np.asarray(d['lon']),np.asarray(d['lat'])
-        expected=((49,37) if d.get('bounds')==[108.,18.,120.,27.] else (361,241)) if d['storage'].endswith('-regional-v1') else (1441,721)
+        expected=({(108.,18.,120.,27.):(49,37),(104.,18.,121.,27.):(69,37)}.get(tuple(d.get('bounds') or ()),(361,241))) if d['storage'].endswith('-regional-v1') else (1441,721)
         if (len(x),len(y))!=expected or x[0]>BOUNDS[0] or x[-1]<BOUNDS[2] or y[0]>BOUNDS[1] or y[-1]<BOUNDS[3] or not np.allclose(np.diff(x),.25) or not np.allclose(np.diff(y),.25): raise ValueError('Forecast grid mismatch')
         ix=np.flatnonzero((x>=BOUNDS[0])&(x<=BOUNDS[2]));iy=np.flatnonzero((y>=BOUNDS[1])&(y<=BOUNDS[3]));lon,lat=x[ix],y[iy]
         for key in keys:
-            a=np.load(field_directory(p)/(key+'.npy'),allow_pickle=False,mmap_mode='r')
+            a=load_array(field_directory(p)/(key+'.npy'),allow_pickle=False,mmap_mode='r')
             if a.shape!=(len(y),len(x)): raise ValueError('Forecast shape mismatch')
             arrays.append(np.asarray(a[np.ix_(iy,ix)],float))
     if element=='mslp' and (np.nanmin(arrays[0])<500 or np.nanmax(arrays[0])>1150): raise ValueError('Pressure unit/range mismatch')
@@ -375,7 +433,9 @@ def datasets_for(rows,now):
             models=[m for m in supported if any(r['model']==m for r in items)]
             issues={}
             if not element:
-                issues={'Google WeatherNext 2':'本地无高空资料',WN3:'本地仅接入地面场'}
+                issues={'Google WeatherNext 2':'本地无高空资料'}
+                for name in (WN3,'GEFS集合平均'):
+                    if name not in models:issues[name]='该层暂无已配对评分'
                 if 'ECMWF-ENSEMBLES平均' not in models:issues['ECMWF-ENSEMBLES平均']='该层暂无本地集合场'
             note=('ERA5 再分析通常延迟约5天；近期 ERA5T 为初步资料。' if source=='era5' else 'GDAS 同有效时刻 f00 分析场。')
             note+='预报双线性插值到固定0.25°分析网格；同一时效、有效时间和要素的已接入模式使用共同有效格点。'
@@ -390,6 +450,13 @@ def datasets_for(rows,now):
                 leads=sorted({r['lead'] for r in items}) or [],thresholds=[],times=sorted({r['valid'] for r in items}),
                 updated=bjt(datetime.fromtimestamp(max((r['created'] for r in items),default=now.timestamp()),UTC))))
     return result
+
+def only_models_removed(old,new):
+    """new 只比 old 少了某些模式（预报场被保留期删掉），参考场和其余模式的输入签名都没变。"""
+    norm=lambda value:json.loads(json.dumps(value))
+    old,new=norm(old),norm(new)
+    if not old or not new or old[0]!=new[0]:return False
+    return all(item in old[1:] for item in new[1:])
 
 def refresh(fetch_limit=4):
     CACHE.mkdir(parents=True,exist_ok=True)
@@ -434,6 +501,10 @@ def refresh(fetch_limit=4):
             keys=[f"{ident}:{j['model']}:{iso(j['run'])}:{j['lead']}" for j,_ in entries]
             if all(key in memo and memo[key]['signature']==sig for key in keys):
                 return {key:memo[key] for key in keys},0
+            # 2026-11-14 预报场改为只留 15 天：同组里只是有模式的预报场被删、参考场和其余模式输入都没变时，
+            # 沿用原结果，不按缩小后的共同掩膜重算，历史分数保持不变。
+            if all(key in memo and only_models_removed(memo[key]['signature'],sig) for key in keys):
+                return {key:memo[key] for key in keys},0
             paired=[];failures=0
             for (j,_),key in zip(entries,keys):
                 try:
@@ -459,6 +530,14 @@ def refresh(fetch_limit=4):
                 if index%100==0:print('Scored groups',index+1,'/',len(groups),'rows',len(rows),'validation failures',errors,flush=True)
                 # Checkpoint: a restart then resumes from memo hits instead of rescoring everything.
                 if index%500==499:atomic_json(CACHE/'memo.json',dict(version=VERSION,entries={**memo,**updated}))
+        # 2026-11-14 预报场改为只留 15 天：窗口内已经算好、但预报场已被删掉的结果继续保留
+        # （与站点评分一致：不因预报场删除而丢掉已算好的分数）。
+        window_lo,window_hi=bjt(now-timedelta(days=31)),bjt(now-timedelta(hours=6))
+        for key,item in memo.items():
+            if key in updated:continue
+            row=item.get('row') if isinstance(item,dict) else None
+            if row and window_lo<=str(row.get('valid',''))<=window_hi:
+                updated[key]=item;rows.append(row)
         atomic_json(CACHE/'memo.json',dict(version=VERSION,entries=updated))
         out=dict(version=VERSION,datasets=datasets_for(rows,now),rows=rows,generated=iso(now),validation_failures=errors,reference_download_bytes=transferred)
         atomic_json(CACHE/'catalog.json',out)

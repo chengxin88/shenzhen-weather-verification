@@ -11,7 +11,7 @@ const stationTable=JSON.parse(fs.readFileSync('stations.json','utf8')).stations.
 stationTable[0].model_elevations={ec01:stationTable[0].elevation+400};stationTable[0].elevation_flags=['ec01'];
 const metadata={state:'ready',generated:'2026-10-25T12:00:00Z',window_end:'2026-10-25T12:00:00Z',stations:stationTable,stations_with_data:3,
  sources:{ogimet:{stations:2,latest:'2026-10-25T12:00:00Z'}},ogimet:{stopped:null},...JSON.parse(fs.readFileSync('station-basemap.json','utf8')),
- models:[{id:'ec01',label:'EC 0.1°',leads:[6,24,48]},{id:'ecmwf',label:'EC 0.25°',leads:[6,24,48]},{id:'gfs',label:'GFS',leads:[6,24,48]}],
+ models:[{id:'ec01',label:'EC 9 km',leads:[6,24,48]},{id:'ecmwf',label:'EC 0.25°',leads:[6,24,48]},{id:'gfs',label:'GFS',leads:[6,24,48]}],
  variables:[{id:'t',label:'2米气温',unit:'°C',thresholds:[]},{id:'rain6',label:'6小时降水',unit:'mm',thresholds:[.1,10]}]};
 function response(value){return {ok:true,status:200,json:async()=>structuredClone(value)};}
 function scores(url){
@@ -34,6 +34,7 @@ w.fetch=async(path,options={})=>{
   }
   return response(scores(url));
  }
+ if(url.pathname.endsWith('/station-leads'))return response({leads:[6,24,48]});
  const rain=url.searchParams.get('var').startsWith('rain');
  return response({station:stationTable.find(s=>s.id===url.searchParams.get('id')),
   stats:rain?[{n:2,H:1,M:0,F:1,TS:.5,POD:1,FAR:.5,ETS:0,threshold:.1},{n:2,H:1,M:0,F:1,TS:.5,POD:1,FAR:.5,ETS:0,threshold:10}]:[{n:2,ME:1.5,MAE:1.5,RMSE:1.581,CC:1}],
@@ -53,34 +54,37 @@ function latestScores(){return calls.filter(c=>c.url.pathname.endsWith('/scores'
   await waitFor(()=>doc.querySelector('#stations-detail-body svg'));
   assert.equal(doc.getElementById('stations-workspace').hidden,false);
   assert.equal(doc.getElementById('grid-workspace').hidden,true);
-  assert.equal(latestScores().searchParams.get('models'),'ec01,ecmwf');
+  assert.equal(latestScores().searchParams.get('models'),'ec01,gfs');
   assert.equal(doc.querySelectorAll('.stations-point').length,3);
   assert(doc.querySelector('.stations-coast'),'full coastline is rendered');
   assert(doc.querySelector('.stations-province'),'province boundaries are rendered');
   assert(doc.querySelector('.stations-border'),'Guangxi land border is rendered');
-  assert(doc.querySelector('.stations-coast').parentElement.hasAttribute('clip-path'),'map lines stay inside the plotting rectangle');
-  assert.match(doc.querySelector('.stations-map-key').textContent,/省界/);
+  assert(doc.querySelector('.stations-coast').closest('[clip-path]'),'map lines stay inside the plotting rectangle');
+  assert.match(doc.querySelector('.stations-map-key').textContent,/站点评分范围/);
   assert(doc.querySelector('.stations-point path'),'high elevation difference should use a triangle');
   assert.match(doc.querySelector('.stations-score-table').textContent,/1\.581/);
   doc.querySelector('[data-station-id="59287"]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
   await waitFor(()=>doc.getElementById('stations-id')?.value==='59287' && doc.querySelector('#stations-detail-body svg'));
-  change('stations-map-model','ecmwf');
-  await waitFor(()=>doc.getElementById('stations-detail-model')?.value==='ecmwf');
+  change('stations-map-model','gfs');
+  await waitFor(()=>doc.getElementById('stations-detail-model')?.value==='gfs');
   change('stations-var','rain6');
   await waitFor(()=>doc.getElementById('stations-threshold') && doc.querySelector('#stations-detail-body svg'));
   assert.equal(doc.getElementById('stations-metric').value,'TS');
   change('stations-threshold','10');
   await waitFor(()=>doc.querySelector('#stations-detail-body svg'));
   assert.match(doc.querySelector('.stations-score-table').textContent,/0\.5/);
-  doc.querySelector('[data-station-model="gfs"]').click();
-  await waitFor(()=>latestScores().searchParams.get('models').includes('gfs')&&doc.querySelector('#stations-detail-body svg'));
+  doc.querySelector('[data-station-model="ecmwf"]').click();  // EC 0.25° is opt-in
+  await waitFor(()=>latestScores().searchParams.get('models').includes('ecmwf')&&doc.querySelector('#stations-detail-body svg'));
   assert(doc.querySelector('[data-station-days="1"]').disabled,'windows missing from an older snapshot stay disabled');
   doc.querySelector('[data-station-days="7"]').click();
   await waitFor(()=>latestScores().searchParams.get('days')==='7'&&doc.querySelector('#stations-detail-body svg'));
-  change('stations-range','25-72');
-  await waitFor(()=>latestScores().searchParams.get('range')==='25-72'&&doc.querySelector('#stations-detail-body svg'));
+  assert.equal(doc.getElementById('stations-range'),null,'no lead grouping selector');
+  assert.equal(doc.querySelectorAll('[data-station-detail-group], #stations-detail-groups').length,0);
+  assert.doesNotMatch(doc.getElementById('stations-workspace').textContent,/分组|临近预报/);
+  assert.equal(latestScores().searchParams.get('range'),'0-240');
+  assert(calls.filter(c=>c.url.pathname.endsWith('/station')).every(c=>c.url.searchParams.get('leads')==='6,24,48'&&!c.url.searchParams.has('group')),'detail requests every available lead without a group');
   assert.match(doc.querySelector('.stations-score-table').textContent,/48 h/);
-  assert.doesNotMatch(doc.querySelector('.stations-score-table').textContent,/6 h/);
+  assert.match(doc.querySelector('.stations-score-table').textContent,/6 h/);
   // A delayed response deliberately ignores AbortSignal: it must not replace
   // the stored rain table after the user has changed variables.
   deferTemperature=true;change('stations-var','t');

@@ -65,7 +65,7 @@ class Metadata(unittest.TestCase):
             self.assertEqual(Path(path).name,f'f{lead:03}_rain1h.npz')
             x,y,array=native.load_wn3_field(Path(path),run,lead,'rain1h',directory);arrays.append(array)
         total=sum(arrays,np.zeros_like(arrays[0],dtype=float))
-        app=Path('/home/chengyang/ec-gfs-server')
+        app=Path('/home/yjzx/verification-platform/ec-gfs-server')
         grid=pd.read_excel(app/'data/grid.xlsx',sheet_name='数据集1').rename(columns={'格网ID（唯一）':'GRIDID','格网左下角经度（度）':'west','格网右上角经度（度）':'east','格网左下角纬度（度）':'south','格网右上角纬度（度）':'north'})
         for key in ['GRIDID','west','east','south','north']:grid[key]=pd.to_numeric(grid[key],errors='coerce')
         grid=grid.dropna(subset=['GRIDID','west','east','south','north']);grid.GRIDID=grid.GRIDID.astype(int)

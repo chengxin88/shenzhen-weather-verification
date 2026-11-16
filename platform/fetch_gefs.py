@@ -2,9 +2,10 @@
 """Fetch NOAA GEFS ensemble-mean (geavg, 0.25°) 2 m temperature and 6 h rain for the verification platform.
 
 Test-platform data only: frames go to cache/native-backfill/gefs in the same layout as the AI frames
-(<slug>_<run>_f<lead>_global1.json + .fields/*.npy, 108–120°E / 18–27°N, 0.25°). Range requests only
-fetch the two needed GRIB messages; finished frames are skipped, so the script can be re-run.
-Usage: fetch_gefs.py [--days N] [--runs 0,12] [--workers N]
+(<slug>_<run>_f<lead>_global1.json + .fields/*.npy, station box 97–123°E / 18–33°N, 0.25°). Range requests
+only fetch the needed GRIB messages; finished frames are skipped, so the script can be re-run; frames of
+the old 108–120°E box (before 2026-11-02) are re-fetched.
+Usage: fetch_gefs.py [--days N] [--runs 0,6,12,18] [--workers N]
 """
 import argparse, json, os, re, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,10 +14,13 @@ from pathlib import Path
 import numpy as np, requests, eccodes
 
 OUT = Path(__file__).resolve().parent / 'cache' / 'native-backfill' / 'gefs'
-PROXY = os.environ.get('DL_PROXY', 'http://127.0.0.1:17908')
-LON = np.arange(108, 120 + 1e-6, .25)
-LAT = np.arange(18, 27 + 1e-6, .25)
-LEADS = list(range(0, 169, 6))
+PROXY = os.environ.get('DL_PROXY', '')
+BOUNDS = [97., 18., 123., 33.]   # station_common.BOX
+OLD_BOUNDS = [104., 18., 121., 27.]   # finished frames stay valid; only new runs use the wider box
+LON = np.arange(BOUNDS[0], BOUNDS[2] + 1e-6, .25)
+LAT = np.arange(BOUNDS[1], BOUNDS[3] + 1e-6, .25)
+SHAPE = (len(LAT), len(LON))
+LEADS = list(range(0, 241, 6))   # only valid times already passed are fetched (verification data)
 BASE = 'https://noaa-gefs-pds.s3.amazonaws.com/gefs.{run:%Y%m%d}/{run:%H}/atmos/pgrb2sp25/geavg.t{run:%H}z.pgrb2s.0p25.f{lead:03d}'
 log = lambda *a: print(time.strftime('%H:%M:%S'), *a, flush=True)
 iso = lambda t: t.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -47,7 +51,7 @@ def message(s, url, lines, pattern):
             return get(s, url, (start, end))
     return None
 
-def crop(msg):
+def crop(msg, lon=LON, lat=LAT):
     g = eccodes.codes_new_from_message(msg)
     try:
         ni, nj = eccodes.codes_get(g, 'Ni'), eccodes.codes_get(g, 'Nj')
@@ -59,8 +63,8 @@ def crop(msg):
         v = eccodes.codes_get_values(g).reshape(nj, ni)
     finally:
         eccodes.codes_release(g)
-    jj = np.rint(((LAT - la0) if positive else (la0 - LAT)) / d).astype(int)
-    ii = np.rint(((LON - lo0) % 360) / d).astype(int)
+    jj = np.rint(((lat - la0) if positive else (la0 - lat)) / d).astype(int)
+    ii = np.rint(((lon - lo0) % 360) / d).astype(int)
     out = v[np.ix_(jj, ii)].astype(np.float32)
     if not np.isfinite(out).all(): raise ValueError('missing values in box')
     return out
@@ -72,12 +76,21 @@ FIELDS = {  # name -> (.idx pattern, scale, offset); rain6h is added per lead
     'surface_v': (r':VGRD:10 m above ground:', 1.0, 0.0),
 }
 
+def current(path):
+    """A field file exists and has the current box shape."""
+    try: return np.load(path, mmap_mode='r', allow_pickle=False).shape == SHAPE
+    except (OSError, ValueError): return False
+
 def frame(run, lead, s):
     valid = run + timedelta(hours=lead)
     stem = OUT / f'gefs_{run:%Y%m%d%H}_f{lead:03d}_global1'
     meta = stem.with_suffix('.json'); folder = stem.with_suffix('.fields')
     wanted = list(FIELDS) + (['rain6h'] if lead else [])
-    missing = [n for n in wanted if not (folder / (n + '.npy')).is_file()]
+    if meta.is_file():
+        try: old_box = json.loads(meta.read_text()).get('bounds') not in (BOUNDS, OLD_BOUNDS)
+        except ValueError: old_box = True
+        if old_box: meta.unlink()   # an old-box frame stops being complete before its fields change
+    missing = [n for n in wanted if not current(folder / (n + '.npy'))]
     if meta.is_file() and not missing: return 'cached'
     url = BASE.format(run=run, lead=lead)
     idx = get(s, url + '.idx')
@@ -96,9 +109,10 @@ def frame(run, lead, s):
     folder.mkdir(parents=True, exist_ok=True)
     for name, a in fields.items():
         tmp = folder / (name + '.tmp.npy'); np.save(tmp, a.astype(np.float32)); os.replace(tmp, folder / (name + '.npy'))
-    if not meta.is_file():
+    # Every field is now in the current box, so a frame still describing the old one must say so too.
+    if not meta.is_file() or json.loads(meta.read_text()).get('bounds') != BOUNDS:
         doc = dict(schema=2, model='GEFS集合平均', run=iso(run), valid=iso(valid), lead=lead, storage='gefs-regional-v1',
-                   bounds=[108., 18., 120., 27.], native_grid_degrees=0.25, native_grid_shape=[len(LAT), len(LON)],
+                   bounds=BOUNDS, native_grid_degrees=0.25, native_grid_shape=[len(LAT), len(LON)],
                    periodic_longitude=False, lon=LON.tolist(), lat=LAT.tolist(), interval_hours=6,
                    rain_start=iso(valid - timedelta(hours=6)) if lead else None, rain_accum_start=0, **{'global': False},
                    source='NOAA GEFS ensemble mean (geavg) pgrb2s 0.25')

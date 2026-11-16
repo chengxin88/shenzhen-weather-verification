@@ -16,10 +16,14 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 
-APP = Path(os.getenv('VERIFICATION_APP_ROOT', '/home/chengyang/ec-gfs-server'))
+APP = Path(os.getenv('VERIFICATION_APP_ROOT', '/home/yjzx/verification-platform/ec-gfs-server'))
 KINDS = ['降水', '2米气温', '10米风速', '等压面', '垂直廓线']
 LEVELS = ['925', '850', '700', '500', '200']
 SOURCES = ['sz-open-data-v1', 'ana-sfc-alpha', 'ana-sfc-gd', 'ana-3d-alpha']
+# 第一阶段只登记个例；核心评分的 RUNS / MODELS 保持原样。
+CASES = [{'id':'2026-07-25', 'label':'2026-07-25 台风“红霞”', 'date':'2026-07-25',
+          'runs':[{'id':'2026072500','label':'08时'}, {'id':'2026072512','label':'20时'}]}]
+FIELD_CACHE = APP/'cache'/'case_fields'  # 落区小图用的配对格点值
 _engine = None
 _engine_lock = threading.Lock()
 _jobs = {}
@@ -95,21 +99,25 @@ def metadata():
     for model in e['MODELS']:
         caps = {run:sorted({lev for x in entries if x['model']==model and x['run']==run for lev in x.get('levels',[])}) for run in e['RUNS']}
         capabilities.append({'id':model, 'label':labels.get(model,model), 'runs':caps})
-    return {'title':'深圳市 · 7月25日个例检验', 'date':'2026-07-25', 'generation':catalog['generation'], 'cache_version':'case-view-v1:'+str(e['VERSION']),
-        'models':capabilities, 'runs':[{'id':r,'label':'08时' if r.endswith('00') else '20时'} for r in e['RUNS']],
+    current=CASES[0]
+    return {'title':'深圳市 · 个例检验', 'date':current['date'], 'cases':CASES, 'case':current['id'], 'generation':catalog['generation'], 'cache_version':'case-view-v2:'+str(e['VERSION']),
+        'models':capabilities, 'runs':current['runs'],
         'kinds':KINDS, 'levels':LEVELS, 'sources':[{'id':s,'label':labels.get(s,s)} for s in SOURCES],
         'reference':'深圳开放数据格点分析场', 'notice':'2026年7月25日08／20时起报；按实际有效时刻配对所选实况分析场，参考资料并非独立站点观测。'}
 
 def selection(raw):
     if not isinstance(raw,dict): raise ValueError('检验条件格式不正确。')
     e=engine(); kind=raw.get('kind','降水')
+    current=next((c for c in CASES if c['id']==raw.get('case',CASES[0]['id'])),None)
+    if current is None: raise ValueError('未知个例，请从目录选择。')
     if kind not in KINDS: raise ValueError('未知检验类别。')
     def choose(name, allowed, default):
         val=raw.get(name,default)
         if not isinstance(val,list) or not val or any(x not in allowed for x in val) or len(val)!=len(set(val)):
             raise ValueError('请正确选择'+name+'。')
         return [x for x in allowed if x in val]
-    runs=choose('runs',e['RUNS'],[e['RUNS'][0]])
+    case_runs=[r['id'] for r in current['runs']]
+    runs=choose('runs',case_runs,[case_runs[0]])
     models=choose('models',e['MODELS'],list(e['MODELS']))
     window=raw.get('window',0)
     if type(window) is not int or window not in [0,24,48]: raise ValueError('无效预报时效。')
@@ -126,7 +134,7 @@ def selection(raw):
     if source not in SOURCES or (levels==['surface'] and source=='ana-3d-alpha'): raise ValueError('无效实况来源。')
     spacing=raw.get('spacing',.03); common=raw.get('common',True)
     if spacing not in [.03,.01] or type(common) is not bool: raise ValueError('无效样本设置。')
-    return dict(kind=kind,runs=runs,models=models,window=window,hours=hours,thresholds=thresholds,
+    return dict(case=current['id'],kind=kind,runs=runs,models=models,window=window,hours=hours,thresholds=thresholds,
                 fields=fields,levels=levels,source=source,spacing=spacing,common=common)
 
 def prepare(p,catalog):
@@ -239,3 +247,84 @@ def job_status(token):
     with _job_lock:
         if token not in _jobs: raise ValueError('任务已过期，请重新计算。')
         return public_job(_jobs[token])
+
+
+def fields(raw):
+    """Return the first selected run on precisely the scoring target grid."""
+    p=selection(raw)
+    if p['kind']!='降水': raise ValueError('落区对比目前只支持降水。')
+    catalog=source_catalog()
+    times,_,_=prepare({**p,'runs':p['runs'][:1]},catalog)
+    valid=raw.get('valid')
+    if not isinstance(valid,str) or valid not in times: raise ValueError('请选择当前起报和时效内的有效时刻。')
+    value=_fields(json.dumps(p,sort_keys=True),valid,catalog['generation'],json.dumps(catalog,sort_keys=True))
+    if value['issues'] or any(m['N']==0 for m in value['models']):_fields.cache_clear()
+    return value
+
+
+@lru_cache(maxsize=8)
+def _fields(selection_json,valid,generation,catalog_json):
+    # Use exactly the native scoring readers and interpolation. Only the pairing
+    # mask is assembled here; the regression test checks every contingency cell.
+    p=json.loads(selection_json);catalog=json.loads(catalog_json);e=engine();np=e['np']
+    run=p['runs'][0];hours=p['hours'];segment_hours=2 if hours==2 else 6
+    end=datetime.fromisoformat(valid.replace('Z','+00:00'))
+    segments=[(end-timedelta(hours=h)).isoformat().replace('+00:00','Z') for h in range(hours-segment_hours,-1,-segment_hours)]
+    if p['source']=='sz-open-data-v1':
+        import case_opendata as opened
+        catalog={**catalog,'entries':[*catalog['entries'],*[opened.entry(t) for t in segments]]}
+    boundary_text=(APP/'data'/'shenzhen_streets.geojson').read_text(encoding='utf-8')
+    points=e['city_points'](boundary_text,p['spacing'])
+    lookup={(x['model'],x['run'],x['valid']):x for x in catalog['entries'] if x.get('kind')!='analysis'}
+    refs={(x['model'],x['valid']):x for x in catalog['entries'] if x.get('kind')=='analysis'}
+    level='verify_surface' if segment_hours==2 else 'verify_surface_6h'
+    forecast_level='verify_compare_surface' if segment_hours==2 else 'verify_compare_surface_6h'
+    def read(items,lev,name):
+        if any(item is None for item in items): raise ValueError('累计窗口内资料缺测。')
+        # 读原始场要几秒到十几秒一个模式；把配对到目标格点后的数存盘，同一时段第二次看就是即时的。
+        # 存的是原引擎 combined_values 的输出本身，不改任何数值；键里带数据世代，资料更新后自动失效。
+        key=json.dumps([str(e['VERSION']),generation,name,run if name!=p['source'] else '',valid,hours,p['spacing'],lev,len(points)])
+        path=FIELD_CACHE/(hashlib.sha256(key.encode()).hexdigest()[:40]+'.json')
+        try:
+            saved=json.loads(path.read_text(encoding='utf-8'))
+            if saved['key']==key and len(saved['values'])==len(points):
+                return np.array([np.nan if v is None else v for v in saved['values']],dtype=np.float64)
+        except (OSError,ValueError,KeyError,TypeError): pass
+        values=np.asarray(e['combined_values']([e['get_frame'](catalog,item,lev,segment_hours) for item in items],'rain',points),dtype=np.float64)
+        try:
+            FIELD_CACHE.mkdir(parents=True,exist_ok=True)
+            tmp=path.with_suffix(f'.tmp{os.getpid()}-{threading.get_ident()}')
+            tmp.write_text(json.dumps({'key':key,'values':[v if math.isfinite(v) else None for v in values.tolist()]}),encoding='utf-8')
+            os.replace(tmp,path)
+        except OSError: pass
+        return values
+    obs=np.full(len(points),np.nan);paired={};issues=[]
+    try:obs=read([refs.get((p['source'],t)) for t in segments],level,p['source'])
+    except Exception:issues.append('当前时段实况缺测，未纳入评分。')
+    for model in p['models']:
+        try:
+            fc=read([lookup.get((model,run,t)) for t in segments],forecast_level,model)
+            mask=np.isfinite(fc)&np.isfinite(obs)
+            if mask.any():paired[model]=(fc,mask)
+        except Exception:pass  # Raw reader errors may contain upstream request details.
+    shared=None
+    if p['common']:
+        if len(paired)!=len(p['models']):paired={}
+        elif paired:shared=np.logical_and.reduce([mask for _,mask in paired.values()])
+    labels={m['id']:m['label'].replace('知己','智霁') for m in catalog['models']}
+    models=[]
+    for model in p['models']:
+        fc,mask=paired.get(model,(np.full(len(points),np.nan),np.zeros(len(points),dtype=bool)))
+        if shared is not None:mask=shared
+        models.append({'id':model,'label':labels.get(model,model),'values':np.where(mask,fc,np.nan).tolist(),'N':int(mask.sum())})
+    if p['common']:
+        obs=np.where(shared if shared is not None else np.zeros(len(points),dtype=bool),obs,np.nan)
+    if any(m['N']==0 for m in models):issues.append('当前时段有模式没有有效配对；共同样本模式下，该时段不评分。')
+    fresh=e['request']('/status')
+    if not fresh.get('online') or fresh['generation']!=generation: raise ValueError('数据源已更新，请刷新后重试。')
+    geo=json.loads(boundary_text)
+    city=e['unary_union']([e['shape'](f['geometry']) for f in geo['features']]).simplify(.003)  # 只画轮廓，约 300 米精度足够
+    payload=clean({'selection':p,'run':run,'valid':valid,'valid_time':e['bjt'](valid),'generation':generation,
+                  'points':points.tolist(),'observations':obs.tolist(),'models':models,
+                  'boundary':city.__geo_interface__,'issues':issues})
+    return payload

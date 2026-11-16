@@ -6,6 +6,10 @@ import json
 import os
 from pathlib import Path
 import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
+from wn3_storage import read_path, union_glob
+
+import sys
 import tempfile
 
 import numpy as np
@@ -13,12 +17,12 @@ import pandas as pd
 from shapely.geometry import Point, shape
 from shapely.ops import unary_union
 
-sys.path.append('/home/chengyang/verification-test')
+sys.path.append('/home/yjzx/verification-platform/verification-test')
 import native_archive as native
 from model_interfaces import GridRequest, validate_field
 
-APP = Path('/home/chengyang/ec-gfs-server')
-WEATHER = Path('/home/chengyang/gods-eye-weather/weather-data/region-v4/weathernext3')
+APP = Path('/home/yjzx/verification-platform/ec-gfs-server')
+WEATHER = Path('/home/yjzx/verification-platform/gods-eye-weather/weather-data/region-v4/weathernext3')
 BJT = timezone(timedelta(hours=8))
 SOURCE = 'Google DeepMind WeatherNext 3 集合均值 · 已验证本机原生缓存 · 仅用于接口演示'
 
@@ -37,7 +41,7 @@ def atomically_write(path, value):
 def main(destination):
     now = datetime.now(timezone.utc)
     candidates = []
-    for path in sorted(WEATHER.glob('run_??????????.json'), reverse=True):
+    for path in sorted(union_glob(WEATHER,'run_??????????.json'), reverse=True):
         try:
             run, directory, committed = native.wn3_manifest(path)
             lead = 6
@@ -45,7 +49,7 @@ def main(destination):
             if valid > now - timedelta(hours=1) or not {4, 5, 6}.issubset(committed):
                 continue
             name = valid.astimezone(BJT).strftime('%Y%m%d%H') + '.pkl'
-            roots = (APP/'cache/OBSERVATION/grid', Path('/home/chengyang/verification-test/cache/obs-backfill/grid'))
+            roots = (APP/'cache/OBSERVATION/grid', Path('/home/yjzx/verification-platform/verification-test/cache/obs-backfill/grid'))
             obs_path = next((root/name for root in roots if (root/name).is_file()), None)
             if obs_path is None:
                 continue

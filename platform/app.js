@@ -1,7 +1,12 @@
 'use strict';
+/* Detail analysis: one element → one metric per page.
+   Scoring itself still lives in core.js; every number on screen, in the
+   table and in the CSV comes from the same grouped rows. */
 const $=id=>document.getElementById(id), C=VerificationCore;
 const WN3='Google WeatherNext 3（集合均值）';
-const palette={'ECMWF-IFS-9km-OpenMeteo':'#117f8b','ECMWF-IFS':'#0072b2','ECAI':'#009e73','ECMWF-ENSEMBLES平均':'#56b4e9','NCEP-GFS':'#d55e00','GFSAI':'#cc79a7','GEFS集合平均':'#8a5a2b','Google WeatherNext 2':'#e69f00','Google WeatherNext 3（集合均值）':'#8b5cf6'};
+const XJ_MODEL='WN3 订正（LightGBM）';
+const EC9KM='ECMWF-IFS-9km-OpenMeteo';
+const palette={'WN3 订正（LightGBM）':'#b8860b','ECMWF-IFS-9km-OpenMeteo':'#117f8b','ECMWF-IFS':'#0072b2','ECAI':'#009e73','ECMWF-ENSEMBLES平均':'#56b4e9','NCEP-GFS':'#d55e00','GFSAI':'#cc79a7','GEFS集合平均':'#8a5a2b','Google WeatherNext 2':'#e69f00','Google WeatherNext 3（集合均值）':'#8b5cf6'};
 const names={'ECMWF-IFS-9km-OpenMeteo':'EC 9 km','ECMWF-IFS':'EC','ECAI':'ECAI','ECMWF-ENSEMBLES平均':'EC 集合平均','NCEP-GFS':'GFS','GFSAI':'GFSAI','GEFS集合平均':'GFS 集合平均','Google WeatherNext 2':'WN2 集合平均','Google WeatherNext 3（集合均值）':'WN3 集合平均'};
 const ids={'ECMWF-IFS':'IFS','ECAI':'AIFS','ECMWF-ENSEMBLES平均':'ENS','GFSAI':'AIGFS','GEFS集合平均':'GEFS'};
 const label=m=>window.DemoModels.profile(m)?window.DemoModels.label(m):names[m]?(ids[m]?`${names[m]}（${ids[m]}）`:names[m]):m;
@@ -10,389 +15,735 @@ const aiModels=new Set(['ECAI','GFSAI','Google WeatherNext 2','Google WeatherNex
 const modelRank=['ECMWF-IFS','ECMWF-IFS-9km-OpenMeteo','ECMWF-ENSEMBLES平均','NCEP-GFS','GEFS集合平均','ECAI','GFSAI','Google WeatherNext 2','Google WeatherNext 3（集合均值）'];
 const numericFirst=models=>models.map((m,i)=>[m,i,modelRank.includes(m)?modelRank.indexOf(m):99]).sort((a,b)=>aiModels.has(a[0])-aiModels.has(b[0])||a[2]-b[2]||a[1]-b[1]).map(x=>x[0]);
 const displayText=text=>String(text??'').replaceAll('集合均值','集合平均');
-const metricNames={TS:'TS · 综合评分',ETS:'ETS · 公平技巧评分',POD:'POD · 命中率',FAR:'FAR · 空报率',MR:'MR · 漏报率',BIAS:'BIAS · 频率偏差',ME:'ME · 平均误差',MAE:'MAE · 平均绝对误差',RMSE:'RMSE · 均方根误差',CC:'CC · 相关系数',VRMSE:'风矢量 RMSE'};
-const metricHelp={TS:'越接近 1 越好；综合考虑命中、漏报和空报。',ETS:'扣除随机命中的影响，越接近 1 越好；需要完整样本总数。',POD:'越接近 1 越好；应结合空报率一起判断。',FAR:'越接近 0 越好；分母为所有预报事件。',MR:'越接近 0 越好；MR = 1 − POD。',BIAS:'越接近 1 越好；大于 1 表示事件预报偏多，小于 1 表示偏少。',ME:'越接近 0 越好；正值表示预报偏高。',MAE:'越接近 0 越好。',RMSE:'越接近 0 越好，对较大的误差更敏感。',CC:'越接近 1 表示空间分布越一致；不代表量值没有偏差。',VRMSE:'越接近 0 越好，合并考察东西、南北风分量误差。'};
-let gridReference=/(^|&)ref=station(&|$)/.test(location.hash.slice(1))||(!location.hash.includes('ref=')&&localStorage.getItem('gridReference')==='station')?'station':'grid';
-const stationDataset=()=>ds?.source==='station';
-const referenceMatches=d=>!['降水','气温'].includes(d.kind)||(d.source==='station')===(gridReference==='station');
-let stationLoading=null,referenceSequence=0;
-let catalog=null, ds=null, kind='降水', view='multi', scoreScope='period', leadMode='single', leadGroup='near', selected=new Set(), tableRows=[], tableColumns=[], timeCommon=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(v,d=3)=>Number.isFinite(v)?v.toLocaleString('zh-CN',{maximumFractionDigits:d,minimumFractionDigits:d}):'—';
+const unique=x=>[...new Set(x)];
+const finite=Number.isFinite;
 const short=t=>t?t.slice(5,10)+' '+t.slice(11,16):'—';
 const full=t=>t?t.slice(0,16).replace('T',' '):'—';
-const unique=x=>[...new Set(x)];
-const unit=()=>$('metric').value==='CC'?'':kind==='气温'?'℃':kind==='地面'?ds.unit:kind==='环流'?($('metric').value==='VRMSE'?'m/s':'m'):'';
-function options(el,items,value){el.replaceChildren(...items.map(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;return o;}));if(items.some(x=>String(x[0])===String(value)))el.value=value;}
-function labelFor(d){return d.kind==='降水'?`${d.accumulation}小时累计降水`:d.kind==='地面'?d.label:d.kind==='环流'?`${d.level} hPa · ${circulationField==='wind'?'风场':'高度场'}`:'2米气温';}
-const sourceName=(d,model)=>d?.source==='station'?'站点实况 · OGIMET SYNOP / NOAA GHCNh / IEM METAR':model==='ECMWF-IFS-9km-OpenMeteo'?`EC 9 km · Open-Meteo · ${d?.reference||'本地固定起报归档'}`:window.DemoModels.profile(model)?`WN3演示 · ${d?.reference||'实况配对'} · 不计入正式排名`:(d?.source==='analysis'||d?.original_source==='analysis')?`本机预报 · ${d.reference}`:d?.source==='comparison'?'全部模式 · 同图对比':d?.source==='hk'?(model===WN3?'WN3 集合平均 · 本机0.1°':model?'EC / GFS · 本地0.25°归档':(d.supported_models||d.models).includes(WN3)?'本地预报缓存 · EC / GFS / WN3':'EC / GFS · 本地0.25°归档'):d?.source==='weekly'?'原 GRIB · 逐时次汇总':'原 GRIB · 多时效归档';
-const elementName=()=>kind==='地面'?(ds?.label||'地面'):kind==='环流'?(circulationField==='wind'?'风场':'高度场'):kind;
-const exportElement=()=>(stationDataset()?'站点实况_':'')+exportElementBase();
-const exportElementBase=()=>kind==='环流'?`${elementName()}_${ds.level}hPa`:kind==='地面'?elementName():kind;
-const defaultModels=d=>{const real=d.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m)),stationPair=real.filter(m=>['ECMWF-IFS-9km-OpenMeteo','ECMWF-IFS'].includes(m));return d.source==='station'&&stationPair.length?stationPair:real;};
-const metricsForView=()=>kind==='降水'?['TS',...((ds.source==='weekly'||ds.has_n)?['ETS']:[]),'POD','FAR','MR','BIAS']:kind==='环流'?C.circulationMetrics(circulationField):kind==='地面'&&ds.element.startsWith('wind')?['VRMSE']:['RMSE','ME','MAE','CC'];
-const metricLabel=m=>m==='CC'&&(periodSummary()||groupSummary())?'CC · 平均空间相关':kind==='地面'?(m==='VRMSE'?'VRMSE · 风矢量均方根误差':metricNames[m]+(m==='CC'?'':' · hPa')):kind==='环流'?({RMSE:'RMSE · 高度均方根误差',ME:'ME · 高度平均误差',MAE:'MAE · 高度平均绝对误差',CC:'CC · 高度空间相关',VRMSE:'VRMSE · 风矢量均方根误差'}[m]||metricNames[m]):metricNames[m];
-const metricColumn=m=>m==='CC'&&(periodSummary()||groupSummary())?'平均空间相关 CC':kind==='地面'?(m==='VRMSE'?'风矢量 RMSE (m/s)':m==='CC'?'CC':`${m} (hPa)`):kind==='环流'?(m==='VRMSE'?'风矢量 RMSE (m/s)':m==='CC'?'高度 CC':`高度 ${m} (m)`):m;
-function setChartTitle(title){if(groupActive()&&!groupSummary())title=selectedGroup().label+' · '+title;if(periodSummary())title='整段时间汇总 · '+title;if(activeModels().some(m=>window.DemoModels.profile(m)))title='含 WN3 演示资料 · '+title;if(stationDataset())title='站点实况 · '+title;$('chart-title').textContent=kind==='环流'?`${elementName()} · ${ds.level} hPa · ${ds.reference} · ${title}`:kind==='地面'?`${elementName()} · ${ds.reference} · ${title}`:title;}
-const referenceBase=r=>String(r||'').replace(' · 深圳及周边',''),referenceLocal=d=>String(d?.reference||'').includes(' · 深圳及周边');
-function referenceControls(){
-  $('reference-filters').hidden=!['环流','地面'].includes(kind);
-  if($('reference-filters').hidden)return;
-  const choices=catalog.datasets.filter(d=>d.kind===kind),sameElement=d=>d.level===ds.level&&(d.element??null)===(ds.element??null);
-  const jump=target=>{if(!target)return;remember();$('dataset').value=target.id;setDataset();};
-  $('reference-switch').replaceChildren(...unique(choices.map(d=>referenceBase(d.reference))).sort((a,b)=>Number(b.includes('ERA5'))-Number(a.includes('ERA5'))).map(reference=>{
-    const b=document.createElement('button');b.type='button';b.textContent=reference;b.setAttribute('aria-pressed',reference===referenceBase(ds.reference));
-    b.onclick=()=>{
-      const same=choices.filter(d=>referenceBase(d.reference)===reference);
-      jump(same.find(d=>referenceLocal(d)===referenceLocal(ds)&&sameElement(d))||same.find(sameElement)||same[0]);
-    };return b;
-  }));
-  let scope=$('reference-scope-field');
-  if(!scope){
-    scope=document.createElement('div');scope.id='reference-scope-field';scope.className='filter-field';
-    scope.innerHTML='<span>检验范围</span><div class="choice-buttons" role="group" aria-label="检验范围"></div>';
-    $('reference-filters').append(scope);
-  }
-  const scoped=choices.filter(d=>referenceBase(d.reference)===referenceBase(ds.reference)&&sameElement(d));
-  scope.hidden=kind!=='地面'||new Set(scoped.map(referenceLocal)).size<2;
-  scope.lastElementChild.replaceChildren(...[false,true].map(local=>{
-    const target=scoped.find(d=>referenceLocal(d)===local);if(!target)return null;
-    const b=document.createElement('button');b.type='button';b.textContent=local?'深圳及周边':'华南及周边';b.title=target.region||'';
-    b.setAttribute('aria-pressed',local===referenceLocal(ds));b.onclick=()=>jump(target);return b;
-  }).filter(Boolean));
-}
-function circulationControls(){
-  $('circulation-filters').hidden=kind!=='环流';
-  $('page-title').textContent=elementName()+'检验';
-  if(kind!=='环流')return;
-  for(const button of document.querySelectorAll('[data-circulation-field]'))button.setAttribute('aria-pressed',button.dataset.circulationField===circulationField);
-  const choices=catalog.datasets.filter(d=>d.kind==='环流'&&d.reference===ds.reference);
-  const scored=new Set(catalog.rows.filter(r=>C.circulationHasScore(r,circulationField)).map(r=>r.dataset));
-  const levels=unique([1000,925,850,700,500,300,200,...choices.map(d=>d.level)]).sort((a,b)=>b-a);
-  $('circulation-level-switch').replaceChildren(...levels.map(level=>{
-    const target=choices.find(d=>d.level===level&&scored.has(d.id)),button=document.createElement('button');
-    button.type='button';button.dataset.level=level;button.disabled=!target;
-    button.textContent=level+' hPa';button.setAttribute('aria-pressed',level===ds.level);
-    button.title=target?`${level} hPa ${elementName()} · 已有评分`:`${level} hPa ${elementName()}暂无评分归档`;
-    button.setAttribute('aria-label',button.title);
-    button.onclick=()=>{remember();$('dataset').value=target.id;setDataset();};return button;
-  }));
-  const available=unique(choices.filter(d=>scored.has(d.id)).map(d=>d.level)).sort((a,b)=>b-a);
-  $('circulation-coverage').textContent=(available.length?`当前有评分：${available.join('、')} hPa。`:'当前要素暂无评分归档。')+' 灰色气压层暂无评分，新增资料后刷新即可选择。';
-}
-function setCirculationField(field){
-  if(kind!=='环流'||!['height','wind'].includes(field))return;
-  if(circulationField==='height')preferences.circulationHeightMetric=$('metric').value;
-  circulationField=field;
-  options($('metric'),metricsForView().map(m=>[m,metricLabel(m)]),field==='height'?preferences.circulationHeightMetric:'VRMSE');
-  circulationControls();render();
-}
-function choiceControls(id,selectId,shortLabel=false){
-  const control=$(selectId),container=$(id),items=[...control.options];
-  const signature=items.map(o=>o.value+'|'+o.textContent).join(';');
-  if(container.dataset.options!==signature){
-    container.dataset.options=signature;
-    container.replaceChildren(...items.map(o=>{
-      const b=document.createElement('button');b.type='button';b.dataset.value=o.value;
-      b.textContent=shortLabel?o.value:o.textContent;b.title=o.textContent;
-      b.setAttribute('aria-label',o.textContent);
-      b.onclick=()=>{control.value=o.value;render();};return b;
-    }));
-  }
-  for(const b of container.children)b.setAttribute('aria-pressed',b.dataset.value===control.value);
-}
-function validChoiceControls(){
-  const control=$('valid'),container=$('valid-switch'),items=[...control.options],size=6;
-  const signature=JSON.stringify(items.map(o=>o.value)),pages=Math.max(1,Math.ceil(items.length/size));
-  const changed=container.dataset.options!==signature||container.dataset.selection!==control.value;
-  let page=changed?Math.floor(Math.max(0,items.findIndex(o=>o.value===control.value))/size):Number(container.dataset.page)||0;
-  page=Math.max(0,Math.min(pages-1,page));
-  container.dataset.options=signature;container.dataset.selection=control.value;container.dataset.page=page;
-  const rendered=signature+'|'+page;
-  if(container.dataset.rendered!==rendered){
-    container.dataset.rendered=rendered;
-    container.replaceChildren(...items.slice(page*size,(page+1)*size).map(o=>{
-      const b=document.createElement('button');b.type='button';b.dataset.value=o.value;
-      b.textContent=short(o.value);b.title=full(o.value)+' BJT';
-      b.setAttribute('aria-label','预报对应时间 '+full(o.value)+' 北京时间');
-      b.onclick=()=>{control.value=o.value;render();};return b;
-    }));
-    if(!items.length){const note=document.createElement('span');note.className='option-empty';note.textContent='无可用时刻';container.append(note);}
-  }
-  for(const b of container.querySelectorAll('button'))b.setAttribute('aria-pressed',b.dataset.value===control.value);
-  $('valid-pager').hidden=pages===1;
-  $('valid-previous').disabled=page===0;$('valid-next').disabled=page===pages-1;
-  $('valid-page').textContent=(page+1)+' / '+pages;
-  $('valid-page').setAttribute('aria-label','第'+(page+1)+'页，共'+pages+'页');
-  const turn=step=>{container.dataset.page=page+step;validChoiceControls();};
-  $('valid-previous').onclick=()=>turn(-1);$('valid-next').onclick=()=>turn(1);
-}
-const matchesPrevious=(d,id)=>d.id===id||d.aliases?.includes(id)||(id?.startsWith('compare:')&&d.source_ids?.some(s=>id.slice(8).split('+').includes(s)));
+const seriesColors=['#0072b2','#009e73','#d55e00','#cc79a7','#e69f00','#56b4e9','#000000','#999999'];
 
-const stateKey='szverify-workbench-v2';
-let preferences={datasets:{}};
-try { preferences=JSON.parse(localStorage.getItem(stateKey))||preferences; } catch {}
-preferences.datasets ||= {};
-preferences.referenceByKind ||= {};
-if(preferences.era5CirculationVersion!==1){preferences.referenceByKind['环流']='ERA5 再分析';preferences.era5CirculationVersion=1;}
-let circulationField=preferences.circulationField==='wind'?'wind':'height';
-// Reopening follows the last seven calendar dates in Beijing time.
-// Within the current page users may choose a custom period or one instant.
+/* ---------- element groups and metric pages ---------- */
+const GROUPS=[
+  {id:'降水',kind:'降水',label:'降水',icon:'☂'},
+  {id:'气温',kind:'气温',label:'气温',icon:'°C'},
+  {id:'地面气压',kind:'地面',element:'mslp',label:'地面气压',icon:'⇣'},
+  {id:'10米风',kind:'地面',element:'wind10',label:'10 米风',icon:'≋'},
+  {id:'100米风',kind:'地面',element:'wind100',label:'100 米风',icon:'≋'},
+  {id:'高空高度场',kind:'环流',field:'height',label:'高空高度场',icon:'≋'},
+  {id:'高空风场',kind:'环流',field:'wind',label:'高空风场',icon:'≋'}
+];
+const RAIN_PAGES=[
+  {key:'PC',label:'晴雨准确率'},
+  {key:'TS',label:'TS 评分'},
+  {key:'ETS',label:'ETS 评分'},
+  {key:'FAR',label:'空报率'},
+  {key:'MR',label:'漏报率'},
+  {key:'BIAS',label:'预报偏差'},
+  {key:'performance',label:'评分综合图'}
+];
+const TEMP_ORDER=['ACC2','ACC1','MAE','RMSE','ME','CC'];
+const ERROR_ORDER=['RMSE','MAE','ME','CC'];
+const metricText={
+  ACC2:'≤2℃准确率',ACC1:'≤1℃准确率',MAE:'平均绝对误差',RMSE:'均方根误差',ME:'平均误差',CC:'相关系数',VRMSE:'风矢量均方根误差',
+  PC:'晴雨准确率',TS:'TS 评分',ETS:'ETS 评分',FAR:'空报率',MR:'漏报率',BIAS:'预报偏差',performance:'评分综合图'
+};
+const metricHelp={
+  PC:'按 ≥0.1 mm 判断有无降水；实况微量而预报有雨算报对。',
+  TS:'报对的站次 ÷（报对 + 空报 + 漏报），越接近 1 越好。',
+  ETS:'扣除随机命中后越接近 1 越好；需要完整样本总数。',
+  FAR:'空报站次 ÷ 所有预报有事件的站次，越接近 0 越好。',
+  MR:'漏报站次 ÷ 所有实况有事件的站次，越接近 0 越好。',
+  BIAS:'（报对 + 空报）÷（报对 + 漏报），越接近 1 越好；大于 1 表示预报偏多。',
+  ACC2:'预报误差不超过 2℃ 的站次比例，越高越好。',
+  ACC1:'预报误差不超过 1℃ 的站次比例，越高越好。',
+  MAE:'每次预报与实况的差值取绝对值后求平均，越小越好。',
+  RMSE:'误差平方平均后开方，越小越好；对大误差更敏感。',
+  ME:'预报减实况的平均值，越接近 0 越好；正值表示预报偏高。',
+  CC:'空间分布相关系数，越接近 1 越好；不代表量值没有偏差。',
+  VRMSE:'东西、南北风分量误差合并后的均方根，单位 m/s，越小越好。',
+  performance:'同时看命中率、成功率（1−空报率）与 TS、BIAS。'
+};
+
+/* ---------- state ---------- */
+let gridReference=/(^|&)ref=station(&|$)/.test(location.hash.slice(1))||(!location.hash.includes('ref=')&&localStorage.getItem('gridReference')==='station')?'station':'grid';
+let stationLoading=null,referenceSequence=0;
+let rowsLoader=null,datasetRows=[],rowsReadyId=null,rowsSequence=0,stationRowsCache=new Map(),stationRowsRange=null;
+let automaticModels=true,selectedBeforeXj=null;
+let catalog=null,ds=null,kind='降水',groupId='降水',metricKey='TS',page='metric',chartMode='lead';
+let selected=new Set(),stateLead=24,datePreset=7,timeCommon=false;
+let tableState={rows:[],columns:[],xKey:'lead',xs:[]};
+let pendingMetric=null,commonFallback=false;
+let circulationField='height';
+let stationRegion='all',scoreStation=null;
+// Single-station picker next to the region buttons. The station list arrives lazily
+// from the station metadata; a station id in the address bar is honoured on arrival.
+let stationSites=null,stationSitesLoading=null;
+const STATION_ID=/^[\w-]{1,16}$/;
+const stationPickText=site=>`${site.name||site.id}（${site.id}）`;
+{
+  const wanted=new URLSearchParams(location.hash.slice(1)).get('station')||'';
+  if(gridReference==='station'&&STATION_ID.test(wanted))scoreStation={id:wanted,name:wanted};
+}
+let preferences={datasets:{},groupDatasets:{}};
+try{preferences=JSON.parse(localStorage.getItem('szverify-workbench-v2'))||preferences;}catch{}
+preferences.datasets||={};preferences.groupDatasets||={};preferences.referenceByKind||={};
 for(const saved of Object.values(preferences.datasets)){
   if(!saved||typeof saved!=='object')continue;
-  saved.days='7';saved.scoreScope='period';
-  delete saved.start;delete saved.end;delete saved.valid;
+  delete saved.start;delete saved.end;delete saved.valid;delete saved.view;delete saved.scoreScope;
+  delete saved.leadMode;delete saved.leadGroup;delete saved.timeCommon;
 }
-const seriesColors=['#0072b2','#009e73','#d55e00','#cc79a7','#e69f00','#56b4e9','#000000','#999999'];
-const color=m=>window.DemoModels.profile(m)?window.DemoModels.color(m):palette[m]||seriesColors[Math.max(0,ds?.leads.indexOf(Number(String(m).replace(/[^\d]/g,'')))||0)%seriesColors.length];
-const timeLeads=()=>view==='time'&&$('time-mode').value==='leads';
-const singleMode=()=>view==='single'||view==='matrix'||timeLeads();
-const manyLeads=()=>view==='lead'||view==='matrix'||timeLeads();
-const activeModels=()=>singleMode()?[$('single').value].filter(Boolean):[...selected];
-const useCommon=()=>view==='time'?timeCommon:$('common').checked;
-const commonOptions=()=>({acrossLeads:(manyLeads()||groupActive())&&useCommon()&&$('across-leads').checked});
-function instantSelection(){return kind!=='降水'&&!['time','info'].includes(view)&&scoreScope==='instant';}
-function periodSummary(){return kind!=='降水'&&!['time','info'].includes(view)&&scoreScope==='period';}
-const groupActive=()=>leadMode==='group'&&view!=='info';
-const groupSummary=()=>groupActive()&&!['lead','matrix'].includes(view)&&!timeLeads();
-const selectedGroup=()=>C.leadGroups.find(g=>g.id===leadGroup)||C.leadGroups[0];
-const leadCaption=()=>groupActive()?selectedGroup().label:$('lead').value!==''?'+'+$('lead').value+'小时':'暂无可用时效';
-let fitNote='';
-function fitGroupModels(){
-  fitNote='';
-  if(!groupActive()||singleMode())return;
-  const rows=leadRows(baseRows(ds.models)),have=new Set(rows.map(r=>r.model));
-  let keep=[...selected].filter(m=>have.has(m));
-  // Models whose forecast cycles never coincide would empty the common sample: drop the one costing least.
-  while(keep.length>1&&!C.commonTimes(rows,keep).length){
-    const best=keep.map(m=>{const rest=keep.filter(x=>x!==m);return [m,C.commonTimes(rows,rest).length];}).sort((a,b)=>b[1]-a[1])[0];
-    keep=keep.filter(m=>m!==best[0]);
-  }
-  if(keep.length&&keep.length<selected.size){
-    const dropped=[...selected].filter(m=>!keep.includes(m));
-    fitNote=`已自动去掉：${dropped.map(label).join('、')}（本组无资料，或与其余模式没有共同时次）。可点模式重新加入。`;
-    selected=new Set(keep);
-  }
-}
-function leadRows(rows){return groupActive()?C.filterLeadGroup(rows,leadGroup):manyLeads()?rows:rows.filter(r=>r.lead===Number($('lead').value));}
-function remember(){
-  if(!ds)return;
-  const state={models:[...selected],knownModels:[...ds.models],view,scoreScope,leadMode,leadGroup};
-  state.days=document.querySelector('[data-days].chosen')?.dataset.days??null;
-  for(const id of ['start','end','hour','metric','threshold','lead','valid','single','time-mode'])state[id]=$(id).value;
-  state.common=$('common').checked;state.across=$('across-leads').checked;state.timeCommon=timeCommon;
-  if(kind==='环流'){
-    preferences.circulationField=circulationField;preferences.circulationLevel=ds.level;
-    if(circulationField==='height')preferences.circulationHeightMetric=$('metric').value;
-  }
-  if(['环流','地面'].includes(kind))preferences.referenceByKind[kind]=ds.reference;
-  preferences.kind=kind;preferences.leadMode=leadMode;preferences.leadGroup=leadGroup;preferences.dataset=ds.id;preferences.datasets[ds.id]=state;
-  try{localStorage.setItem(stateKey,JSON.stringify(preferences));}catch{}
-}
-function modelControls(availableRows=null){
-  const wn2='Google WeatherNext 2',models=[...(ds.supported_models||ds.models)];
-  const wn2Windows=kind==='降水'?unique(catalog.datasets.filter(d=>referenceMatches(d)&&d.kind==='降水'&&d.models.includes(wn2)).map(d=>d.accumulation)).sort((a,b)=>a-b):[];
-  if(wn2Windows.length&&!models.includes(wn2))models.push(wn2);
-  $('models').replaceChildren(...numericFirst(models).map(m=>{
-    const b=document.createElement('button');b.className='model-chip';b.dataset.model=m;b.setAttribute('aria-pressed',selected.has(m));
-    const archived=ds.models.includes(m),available=archived&&(availableRows===null||availableRows.some(r=>r.model===m));
-    const demo=window.DemoModels.profile(m);
-    const demoAlternative=demo&&!archived&&kind==='降水'?catalog.datasets.find(d=>referenceMatches(d)&&d.kind===kind&&d.models.includes(WN3)):null;
-    b.disabled=!archived&&!demoAlternative;
-    const issue=!archived?ds.model_issues?.[m]:null;
-    const otherWindows=m===wn2&&!archived&&wn2Windows.length&&!wn2Windows.includes(ds.accumulation);
-    b.title=demoAlternative?`${displayModel(m)} 当前只有${demoAlternative.accumulation}小时累计；点击切换到真实累计窗口。`:otherWindows?`${displayModel(m)} 暂无${ds.accumulation}小时降水评分；请选择 ${wn2Windows.join('、')} 小时累计查看。`:issue?displayModel(m)+'：'+issue:available?displayModel(m):displayModel(m)+' 在当前日期、起报时次和预报时效下没有'+labelFor(ds)+'评分';
-    b.innerHTML=`<i style="background:${color(m)}"></i>${esc(label(m))}${demoAlternative?' · 仅'+demoAlternative.accumulation+'小时':otherWindows?' · 仅'+wn2Windows.join('/')+'小时':available?'':' · '+esc(issue||'当前条件无资料')}`;
-    b.onclick=()=>{
-      if(demoAlternative){$('dataset').value=demoAlternative.id;setDataset();selected.add(m);modelControls();render();return;}
-      selected.has(m)?selected.delete(m):selected.add(m);modelControls();render();
-    };return b;
-  }));
-  const {nowcasting,short_range,...remainingSystems}=window.DemoModels.groups();
-  const systems=new Map(Object.entries({nowcasting,short_range,global:'中期预报系统',...remainingSystems,other:'其他预报系统'}).map(([id,title])=>[id,{title,buttons:[]}]));
-  for(const button of $('models').children){
-    const model=button.dataset.model,profile=window.DemoModels.profile(model);
-    const system=profile?.group||(Object.hasOwn(names,model)?'global':'other');
-    (systems.get(system)||systems.get('other')).buttons.push(button);
-  }
-  const groups=[...systems].filter(([,system])=>system.buttons.length).map(([id,system])=>{
-    const group=document.createElement('div'),title=document.createElement('h3'),all=document.createElement('button'),chips=document.createElement('div');
-    const roster=system.buttons.map(button=>button.dataset.model),archived=roster.filter(m=>ds.models.includes(m));
-    const alternative=!archived.length&&system.buttons.some(button=>!button.disabled&&window.DemoModels.profile(button.dataset.model))
-      ?catalog.datasets.find(d=>referenceMatches(d)&&d.kind===kind&&d.models.includes(WN3)):null;
-    group.className='model-system-group';group.setAttribute('role','group');group.setAttribute('aria-labelledby','model-system-'+id);
-    title.id='model-system-'+id;
-    all.type='button';all.className='model-system-title';all.dataset.system=id;all.textContent=system.title;
-    all.disabled=!archived.length&&!alternative;
-    all.setAttribute('aria-label',system.title);
-    all.setAttribute('aria-pressed',view==='multi'&&archived.length>0&&selected.size===archived.length&&archived.every(m=>selected.has(m)));
-    all.title=all.disabled?system.title+'暂无'+labelFor(ds)+'评分':alternative
-      ?`切换到${alternative.accumulation}小时累计，查看${system.title}的全部可用演示模式`
-      :`仅选择${system.title}的全部 ${archived.length} 个已归档模式，查看多模式对比`;
-    all.onclick=()=>{
-      if(alternative){$('dataset').value=alternative.id;setDataset();}
-      selected=new Set(roster.filter(m=>ds.models.includes(m)));view='multi';render();
-    };
-    title.append(all);chips.className='model-chips';chips.append(...system.buttons);
-    group.append(title,chips);return {group};
-  });
-  $('models').replaceChildren(...groups.map(g=>g.group));
-  options($('single'),[...selected].map(m=>[m,displayModel(m)]),$('single').value);
-}
-function setKind(value,preferred){
-  kind=value;
-  $('grid-workspace').dataset.activeKind=kind;
-  document.querySelectorAll('[data-kind]').forEach(b=>b.classList.toggle('active',!$('grid-workspace').hidden&&b.dataset.kind===kind));
-  $('page-title').textContent=kind+'检验';
-  const choices=catalog.datasets.filter(d=>d.kind===kind&&referenceMatches(d)).sort((a,b)=>(a.accumulation??0)-(b.accumulation??0)||(a.level??0)-(b.level??0));
-  const wantedReference=['环流','地面'].includes(kind)?(preferences.referenceByKind[kind]||'ERA5 再分析'):null;
-  const scoped=choices.some(d=>d.reference===wantedReference)?choices.filter(d=>d.reference===wantedReference):choices;
-  const target=scoped.find(d=>matchesPrevious(d,preferred))||(kind==='环流'?(scoped.find(d=>d.level===preferences.circulationLevel)||scoped.find(d=>d.level===500)):null)||scoped[0];
-  options($('dataset'),choices.map(d=>[d.id,labelFor(d)]),target?.id);setDataset();
-}
-function datasetControls(){
-  let field=$('dataset-choice-field');
-  if(!field){
-    field=document.createElement('div');field.id='dataset-choice-field';field.className='filter-field';
-    field.innerHTML='<span>检验要素</span><div class="choice-buttons" role="group" aria-label="检验要素"></div>';
-    $('accumulation-label').parentElement.prepend(field);
-  }
-  const choices=catalog.datasets.filter(d=>kind==='地面'&&d.kind===kind&&d.reference===ds.reference);
-  field.hidden=kind!=='地面';
-  field.firstElementChild.textContent='检验要素';
-  field.lastElementChild.replaceChildren(...choices.map(d=>{
-    const b=document.createElement('button');b.type='button';
-    b.textContent=d.label;
-    b.setAttribute('aria-pressed',d.id===ds.id);
-    b.onclick=()=>{$('dataset').value=d.id;setDataset();};return b;
-  }));
-}
-function setDataset(){
-  ds=catalog.datasets.find(d=>d.id===$('dataset').value);
-  if(!ds){$('chart').innerHTML=empty('该要素暂无可用归档');return;}
-  datasetControls();referenceControls();circulationControls();
-  const saved=preferences.datasets[ds.id]||{};
-  scoreScope=saved.scoreScope==='instant'?'instant':'period';
-  leadMode=(saved.leadMode??preferences.leadMode)==='group'?'group':'single';
-  leadGroup=C.leadGroups.some(g=>g.id===(saved.leadGroup??preferences.leadGroup))?(saved.leadGroup??preferences.leadGroup):'near';
-  const remembered=saved.models||defaultModels(ds);
-  const oldRoster=saved.knownModels||(kind==='环流'&&ds.reference.includes('ERA5')?['ECMWF-IFS','NCEP-GFS']:ds.models);
-  const introduced=ds.models.filter(m=>!window.DemoModels.profile(m)&&!oldRoster.includes(m)&&catalog.rows.some(r=>r.dataset===ds.id&&r.model===m&&(leadMode==='group'?C.inLeadGroup(r.lead,leadGroup):r.lead===Number(saved.lead??24))));
-  selected=new Set([...remembered,...introduced].filter(m=>ds.models.includes(m)));
-  modelControls();
-  const metrics=metricsForView();
-  options($('metric'),metrics.map(m=>[m,metricLabel(m)]),kind==='环流'&&circulationField==='height'?(preferences.circulationHeightMetric||saved.metric):saved.metric);
-  options($('threshold'),ds.thresholds.map(t=>[t,'≥ '+t]),saved.threshold??.1);
-  options($('lead'),ds.leads.map(l=>[l,'+'+l+' 小时']),saved.lead??24);
-  for(const id of ['start','end']){$(id).removeAttribute('min');$(id).max=C.calendarWindow(1).end;}
-  const datePreset=['1','3','7','30','all'].includes(saved.days)?saved.days:null;
-  setDates(datePreset??7);
-  const defaultStart=$('start').value,defaultEnd=$('end').value;
-  for(const id of ['start','end'])if(!datePreset&&saved[id])$(id).value=[saved[id],C.calendarWindow(1).end].sort()[0];
-  if((saved.days===null&&!datePreset)||$('start').value!==defaultStart||$('end').value!==defaultEnd)document.querySelectorAll('[data-days]').forEach(b=>b.classList.remove('chosen'));
-  $('hour').value=['all','02','08','14','20'].includes(saved.hour)?saved.hour:'all';
-  $('common').checked=saved.common!==false;$('across-leads').checked=saved.across===true;
-  $('time-mode').value=saved['time-mode']==='leads'?'leads':'models';timeCommon=saved.timeCommon===true;
-  if(saved.single&&selected.has(saved.single))$('single').value=saved.single;
-  if(saved.view&&['multi','single','lead','matrix','time','performance','info'].includes(saved.view))view=saved.view;
-  if(['matrix','performance'].includes(view)&&kind!=='降水')view='multi';
-  for(const name of ['matrix','performance'])document.querySelector(`[data-view="${name}"]`).hidden=kind!=='降水';
-  if(saved.lead===undefined){
-    const raw=baseRows([...selected]),rank=ds.leads.map(lead=>({lead,n:C.commonTimes(raw.filter(r=>r.lead===lead),[...selected]).length}));
-    if(!rank.find(x=>x.lead===Number($('lead').value))?.n){rank.sort((a,b)=>b.n-a.n||Math.abs(a.lead-24)-Math.abs(b.lead-24));if(rank[0]?.n)$('lead').value=rank[0].lead;}
-  }
+let stationRegionLabels={all:'南方地区',hn:'华南地区',hun:'湖南地区',gba:'粤港澳大湾区',hk:'香港',sz:'深圳',xj:'新疆巴里坤'};
 
-  $('accumulation-label').hidden=kind!=='降水';
-  $('accumulation-switch').hidden=kind!=='降水';
-  $('accumulation-switch').replaceChildren(...unique(catalog.datasets.filter(d=>d.kind==='降水'&&referenceMatches(d)).map(d=>d.accumulation)).sort((a,b)=>a-b).map(hours=>{
-    const b=document.createElement('button');b.textContent=hours+' 小时累计';b.setAttribute('aria-pressed',hours===ds.accumulation);
-    b.onclick=()=>{const target=catalog.datasets.find(d=>d.kind==='降水'&&d.accumulation===hours&&d.source===ds.source)||catalog.datasets.find(d=>d.kind==='降水'&&referenceMatches(d)&&d.accumulation===hours);$('dataset').value=target.id;setDataset();};return b;
-  }));
-  validOptions();if(saved.valid&&[...$('valid').options].some(o=>o.value===saved.valid))$('valid').value=saved.valid;
-  clampStationDates();render();
+const currentGroup=()=>GROUPS.find(g=>g.id===groupId)||GROUPS[0];
+const stationDataset=()=>ds?.source==='station';
+const stationScoreActive=()=>stationDataset()&&Boolean(scoreStation);
+const stationScopeLabel=()=>stationScoreActive()?`${scoreStation.name}（${scoreStation.id}）`:stationRegionLabels[stationRegion]||ds?.region||'';
+const referenceMatches=d=>!['降水','气温','地面'].includes(d.kind)||(d.source==='station')===(gridReference==='station');
+const groupMatchesDataset=(g,d)=>Boolean(d)&&d.kind===g.kind&&(!g.element||d.element===g.element)&&(!g.field||C.circulationMetrics(g.field).some(m=>(d.score_metrics||[]).includes(m)));
+const allDatasetsForGroup=g=>!catalog||!g?[]:catalog.datasets.filter(d=>groupMatchesDataset(g,d));
+const datasetsForGroup=(g=catalog?GROUPS.find(x=>x.id===groupId):null)=>{
+  if(!catalog||!g)return [];
+  return allDatasetsForGroup(g).filter(referenceMatches);
+};
+const gridAvailableFor=(g=currentGroup())=>Boolean(catalog&&catalog.datasets.some(d=>d.source!=='station'&&groupMatchesDataset(g,d)));
+const stationKind=g=>['降水','气温'].includes(g.kind)||g.kind==='地面'&&['mslp','wind10'].includes(g.element);
+const referenceSwitchable=g=>stationKind(g)&&gridAvailableFor(g);
+function preferredDatasetFor(g=currentGroup()){
+  const list=datasetsForGroup(g);
+  const saved=preferences.groupDatasets[g.id];
+  return list.find(d=>d.id===saved)||list.find(d=>d.id===preferences.dataset)||list.find(d=>d.id===ds?.id)||list[0];
 }
-function clampStationDates(){
-  if(!stationDataset())return;
-  for(const id of ['start','end']){const el=$(id);el.min=ds.start.slice(0,10);el.max=ds.end.slice(0,10);if(el.value)el.value=el.value<el.min?el.min:el.value>el.max?el.max:el.value;}
+function availableGroups(){
+  if(!catalog)return GROUPS.slice(0,2);
+  return GROUPS.filter(g=>allDatasetsForGroup(g).length);
+}
+function groupMetricDefs(g=currentGroup()){
+  const sample=ds&&groupMatchesDataset(g,ds)?ds:preferredDatasetFor(g)||allDatasetsForGroup(g)[0];
+  if(g.kind==='降水'){
+    const available=sample?C.metricsFor(sample):['TS'];
+    return RAIN_PAGES.filter(m=>m.key==='PC'?Boolean(sample?.has_trace):m.key==='ETS'?available.includes('ETS'):true);
+  }
+  const order=g.kind==='气温'?TEMP_ORDER:g.kind==='环流'?C.circulationMetrics(g.field):g.kind==='地面'&&sample&&sample.source!=='station'&&String(sample.element||'').startsWith('wind')?['VRMSE']:ERROR_ORDER;
+  const catalogMetrics=sample?.score_metrics||[];
+  const available=g.kind==='环流'||order.length===1&&order[0]==='VRMSE'
+    ?new Set(order.filter(m=>!catalogMetrics.length||catalogMetrics.includes(m)))
+    :new Set(sample?C.metricsFor(sample):[]);
+  const defs=order.filter(m=>available.has(m)).map(m=>({key:m,label:metricText[m]}));
+  if(!defs.length)order.forEach(m=>defs.push({key:m,label:metricText[m]}));
+  return defs;
+}
+const metricTitle=m=>m==='CC'&&stationScoreActive()?'单站时间相关 CC':(metricText[m]||m);
+const needsThreshold=()=>kind==='降水'&&['TS','ETS','FAR','MR','BIAS'].includes(metricKey);
+const unit=()=>C.percentMetrics.includes(metricKey)?'%':metricKey==='CC'?'':kind==='气温'?'℃':kind==='地面'?ds?.unit||'':kind==='环流'?(metricKey==='VRMSE'?'m/s':'m'):'';
+const elementName=()=>kind==='地面'?(ds?.label||currentGroup().label):kind==='环流'?(circulationField==='wind'?'风场':'高度场'):kind;
+const labelFor=d=>d.kind==='降水'?`${d.accumulation}小时累计降水`:d.kind==='地面'?d.label:d.kind==='环流'?`${d.level} hPa · ${circulationField==='wind'?'风场':'高度场'}`:'2米气温';
+const exportElement=()=>(stationDataset()?'站点实况_':'')+(kind==='环流'?`${elementName()}_${ds?.level||''}hPa`:kind==='地面'?elementName():kind);
+const color=m=>window.DemoModels.profile(m)?window.DemoModels.color(m):palette[m]||seriesColors[Math.max(0,(ds?.leads||[]).indexOf(Number(String(m).replace(/[^\d]/g,'')))||0)%seriesColors.length];
+const defaultModels=(d,available=null)=>{const real=d.models.filter(m=>!window.DemoModels.profile(m)&&(!available||available.has(m)));return real.includes(EC9KM)?real.filter(m=>m!=='ECMWF-IFS'):real;};
+
+/* ---------- url / page ids ---------- */
+const pageId=()=>page==='info'?'info':page==='map'?`${groupId}:map`:`${groupId}:${metricKey}`;
+function writeHash(){
+  if(!ds)return;
+  const params={page:pageId(),ref:gridReference};
+  if(stationScoreActive())params.station=scoreStation.id;
+  try{history.replaceState(null,'','#grid&'+new URLSearchParams(params));}catch{}
+}
+function parseHashPage(hash){
+  const text=hash.startsWith('#grid')?hash.slice(1).split('&').slice(1).join('&'):hash.slice(1);
+  return new URLSearchParams(text);
+}
+function hashTarget(params){
+  const p=params.get('page');
+  if(p==='info')return {page:'info'};
+  if(p&&p.endsWith(':map'))return {page:'map',groupId:p.slice(0,-4)};
+  if(p){
+    const index=p.indexOf(':');
+    if(index>0)return {groupId:p.slice(0,index),metric:p.slice(index+1)};
+  }
+  const view=params.get('view'),metric=params.get('metric');
+  if(view==='info')return {page:'info'};
+  if(view==='performance')return {metric:'performance'};
+  if(view==='time')return {metric:metric||null,mode:'date'};
+  if(view==='multi'||view==='single'||view==='lead'||view==='matrix')return {metric:metric||null,mode:'lead'};
+  if(metric)return {metric};
+  return null;
+}
+
+/* ---------- navigation ---------- */
+function navPageButton(label,attrs,active){
+  return `<button type="button" class="detail-metric${active?' active':''}" ${active?'aria-current="page"':''} ${attrs}>${esc(label)}</button>`;
+}
+function renderNav(){
+  const tree=$('detail-nav-tree');if(!tree)return;
+  const groups=availableGroups();
+  if(!groups.some(g=>g.id===groupId))groupId=groups[0]?.id||groupId;
+  const activeGroup=groups.find(g=>g.id===groupId)||groups[0];
+  if(!activeGroup)return;
+  const defs=groupMetricDefs(activeGroup);
+  const activeMetric=page==='metric'?metricKey:null;
+  const html=groups.map(g=>`<div class="detail-group${g.id===groupId?' active':''}">
+    <button type="button" class="detail-group-title nav-item${g.id===groupId?' active':''}" data-kind="${esc(g.id)}" aria-pressed="${g.id===groupId}" title="切换到${esc(g.label)}"><span aria-hidden="true">${esc(g.icon)}</span>${esc(g.label)}</button>
+    ${g.id===activeGroup.id?`<div class="detail-subnav">
+      ${defs.map(m=>navPageButton(m.label,`data-metric="${esc(m.key)}" data-page-group="${esc(g.id)}"`,activeMetric===m.key)).join('')}
+      ${stationKind(g)?navPageButton('站点分布',`data-page="map" data-page-group="${esc(g.id)}"`,page==='map'):''}
+      ${navPageButton('说明','data-page="info" data-page-group="' + esc(g.id) + '"',page==='info')}
+    </div>`:''}
+  </div>`).join('');
+  tree.innerHTML=html;
+  const select=$('detail-page-select');
+  if(select){
+    const value=pageId();
+    const options=[];
+    for(const g of groups){
+      const defsFor=groupMetricDefs(g);
+      options.push(`<optgroup label="${esc(g.label)}">${defsFor.map(m=>`<option value="${esc(g.id+':'+m.key)}">${esc(g.label+' · '+m.label)}</option>`).join('')}${stationKind(g)?`<option value="${esc(g.id+':map')}">${esc(g.label+' · 站点分布')}</option>`:''}</optgroup>`);
+    }
+    options.push(`<optgroup label="其他"><option value="info">说明</option></optgroup>`);
+    select.innerHTML=options.join('');
+    if([...select.options].some(o=>o.value===value))select.value=value;
+  }
+}
+
+/* ---------- date / controls ---------- */
+function stationWindow(dataset=ds){
+  if(dataset?.source!=='station'||!dataset.region_nmic_majority?.[stationRegion]||!dataset.nmic_end||!dataset.window_end)return null;
+  const end=Math.min(Date.parse(dataset.window_end),Date.parse(dataset.nmic_end));
+  if(!Number.isFinite(end)||end>=Date.parse(dataset.window_end))return null;
+  return new Date(end+8*3600000).toISOString().slice(0,10);
+}
+function stationWindowNote(){
+  const end=stationWindow();
+  return end?`国家站资料到 ${Number(end.slice(5,7))} 月 ${Number(end.slice(8,10))} 日，默认和快捷日期窗口截止到这一天（北京时间）。`:'';
+}
+function stationDateBounds(dataset){
+  const end=stationWindow(dataset),first=end?C.calendarWindow(30,Date.parse(end+'T12:00:00+08:00')).start:null;
+  return {start:first&&first<dataset.start.slice(0,10)?first:dataset.start.slice(0,10),
+    end:end&&end>dataset.end.slice(0,10)?end:dataset.end.slice(0,10)};
+}
+function useSavedDates(dataset,saved){
+  return dataset.source!=='station'||!saved.stationDatePreset||saved.stationWindowEnd===stationWindow(dataset);
 }
 function setDates(days){
-  const latest=(stationDataset()||ds.reference?.includes('ERA5'))&&ds.end?ds.end.slice(0,10):null,anchored=latest&&latest<C.calendarWindow(1).end?Date.parse(latest+'T12:00:00+08:00'):Date.now();
-  const {start,end}=days==='all'?{start:ds.start.slice(0,10),end:ds.end.slice(0,10)}:C.calendarWindow(days,anchored);
-  $('start').value=start;$('end').value=end;clampStationDates();
-  document.querySelectorAll('[data-days]').forEach(b=>b.classList.toggle('chosen',b.dataset.days===String(days)));
+  if(!ds)return;
+  datePreset=days;
+  const nmicEnd=stationWindow(),latest=nmicEnd||((stationDataset()||ds.reference?.includes('ERA5'))&&ds.end?ds.end.slice(0,10):null),anchored=latest&&(nmicEnd||latest<C.calendarWindow(1).end)?Date.parse(latest+'T12:00:00+08:00'):Date.now();
+  const range=C.calendarWindow(days,anchored);
+  $('start').value=range.start;$('end').value=range.end;clampStationDates();
 }
-function dates(days){if(ds){setDates(days);scoreScope='period';render();}}
-function baseRows(models){const rows=catalog.rows.filter(r=>r.dataset===ds.id&&(kind!=='环流'||C.circulationHasScore(r,circulationField))&&r.valid.slice(0,10)>=$('start').value&&r.valid.slice(0,10)<=$('end').value&&($('hour').value==='all'||r.run.slice(11,13)===$('hour').value));return C.demoRows(rows,models,window.DemoModels.profiles(),WN3);}
-function scopeRows(fixed=true){
-  let raw=baseRows(activeModels());
-  raw=leadRows(raw);
-  if(kind==='降水'&&!['multi','single','matrix'].includes(view))raw=raw.filter(r=>r.threshold===Number($('threshold').value));
-  if(fixed&&instantSelection())raw=raw.filter(r=>r.valid===$('valid').value);
-  return raw;
+function clampStationDates(){
+  if(!ds||(!stationDataset()&&!ds.reference?.includes('ERA5')))return;
+  const bounds=stationDateBounds(ds);
+  for(const id of ['start','end']){const el=$(id);el.min=bounds.start;el.max=bounds.end;if(el.value)el.value=el.value<el.min?el.min:el.value>el.max?el.max:el.value;}
 }
-function validOptions(){
-  if(!ds||kind==='降水')return;
-  let raw=scopeRows(false);if(useCommon())raw=C.commonTimes(raw,activeModels(),commonOptions());
-  const old=$('valid').value,times=unique(raw.map(r=>r.valid)).sort();
-  options($('valid'),times.map(t=>[t,full(t)]),times.includes(old)?old:times.at(-1));
+function hourLabel(){return $('hour').value==='all'?'全部起报时次':$('hour').value+'时起报';}
+function scopeLabel(){return stationDataset()?stationScopeLabel():ds?.region||'';}
+function thresholdValue(){if(kind!=='降水')return null;if(metricKey==='PC')return .1;const value=Number($('threshold').value);return Number.isFinite(value)?value:(ds?.thresholds?.[0]??.1);}
+function validHourText(lead){
+  const startHour=Number($('hour').value);
+  if(!Number.isFinite(startHour))return '';
+  const total=startHour+Number(lead),hour=total%24,days=Math.floor(total/24);
+  return String(hour).padStart(2,'0')+(days>0?`(+${days})`:'');
 }
-function currentRows(){const raw=scopeRows();return useCommon()?C.commonTimes(raw,activeModels(),commonOptions()):raw;}
-function resultGroups(rows,keys){
-  if(groupSummary())keys=keys.filter(k=>k!=='lead');
-  const provenance=new Map(),key=r=>JSON.stringify(keys.map(k=>r[k]));
-  for(const r of rows){if(!provenance.has(key(r)))provenance.set(key(r),new Set());provenance.get(key(r)).add(r.source_dataset||r.dataset);}
-  return C.grouped(rows,keys).filter(r=>kind==='降水'||r[$('metric').value]!==undefined).map(r=>{
-    const ids=[...provenance.get(key(r))];
-    const demo=window.DemoModels.profile(r.model);
-    return {...r,...(demo?{is_demo:true,excluded_from_official_scores:true,source_model:WN3,target_product_id:demo.target_product_id}:{}),...(groupSummary()?{lead:null,lead_group:leadGroup,lead_group_label:selectedGroup().label}:{}),source_datasets:ids.join(';'),source_label:unique(ids.map(id=>sourceName((catalog.origins||catalog.datasets).find(d=>d.id===id),r.model))).join(' / ')};
+function setHour(value){
+  $('hour').value=['all','08','20'].includes(value)?value:'all';render();
+}
+function setThreshold(value){
+  const choices=[...$('threshold').options].map(o=>Number(o.value));
+  $('threshold').value=String(choices.includes(Number(value))?Number(value):(choices[0]??.1));render();
+}
+function renderFilter(){
+  if(!ds)return;
+  const presets=$('date-presets');
+  presets.replaceChildren(...[3,7,15].map(days=>{const b=document.createElement('button');b.type='button';b.dataset.days=String(days);b.textContent=days===15?'近15天':`近${days}天`;b.className=datePreset===days?'chosen':'';b.setAttribute('aria-pressed',String(datePreset===days));b.onclick=()=>{setDates(days);render();};return b;}));
+  const hours=$('hour-switch');
+  hours.replaceChildren(...[['all','全部'],['08','08时'],['20','20时']].map(([value,text])=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.dataset.hour=value;b.setAttribute('aria-pressed',String($('hour').value===value));b.onclick=()=>setHour(value);return b;}));
+  const rain=kind==='降水';
+  $('accumulation-field').hidden=!rain;
+  if(rain){
+    const values=unique((catalog?.datasets||[]).filter(d=>d.kind==='降水'&&referenceMatches(d)).map(d=>d.accumulation)).sort((a,b)=>a-b);
+    $('accumulation-switch').replaceChildren(...values.map(hours=>{const b=document.createElement('button');b.type='button';b.textContent=hours+'小时';b.title=hours+'小时累计';b.dataset.accumulation=String(hours);b.setAttribute('aria-pressed',String(hours===ds.accumulation));b.onclick=()=>chooseAccumulation(hours);return b;}));
+  }
+  const threshold=needsThreshold();
+  $('threshold-field').hidden=!threshold||chartMode==='threshold';
+  if(rain){
+    const choices=ds.thresholds||[];
+    if(metricKey==='PC')$('threshold').value='0.1';
+    else if(!choices.includes(Number($('threshold').value)))$('threshold').value=String(choices[0]??.1);
+    $('threshold-switch').replaceChildren(...choices.map(t=>{const b=document.createElement('button');b.type='button';b.textContent='≥'+t+(metricKey==='PC'?'':'');b.dataset.threshold=String(t);b.setAttribute('aria-pressed',String(Number($('threshold').value)===Number(t)));b.onclick=()=>setThreshold(t);return b;}));
+  }
+  const g=currentGroup(),switchable=referenceSwitchable(g);
+  $('reference-field').hidden=!switchable;
+  if(switchable){
+    $('reference-switch').replaceChildren(...[['station','站点实况'],['grid','格点分析场']].map(([value,text])=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.dataset.reference=value;b.setAttribute('aria-pressed',String(gridReference===value));b.onclick=()=>setReference(value);return b;}));
+  }
+  const refs=unique(datasetsForGroup(g).map(d=>d.reference)).sort();
+  const refField=$('reference-dataset-field');
+  refField.hidden=refs.length<=1;
+  if(refs.length>1){
+    const select=$('reference-dataset');
+    select.replaceChildren(...refs.map(ref=>new Option(ref,ref,false,ref===ds.reference)));
+    select.value=ds.reference;
+    select.onchange=()=>chooseReference(select.value);
+  }
+  $('circulation-level-field').hidden=kind!=='环流';
+  if(kind==='环流'){
+    const levels=unique(datasetsForGroup(g).filter(d=>d.reference===ds.reference).map(d=>d.level)).sort((a,b)=>b-a);
+    const select=$('circulation-level');
+    select.replaceChildren(...levels.map(level=>new Option(level+' hPa',String(level),false,level===ds.level)));
+    select.onchange=()=>chooseLevel(Number(select.value));
+  }
+  const m=metricKey;
+  $('chart-mode-toggle').querySelectorAll('[data-chart-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.chartMode===chartMode)));
+  $('date-lead-label').hidden=!(page==='metric'&&chartMode!=='lead');
+  if(page==='metric'&&chartMode!=='lead'){
+    const select=$('date-lead');
+    select.replaceChildren(...displayLeads(ds).map(l=>new Option('+'+l+' 小时',String(l),false,l===stateLead)));
+    select.value=String(stateLead);
+  }
+  $('filter-note').textContent=`${currentGroup().label} · ${scopeLabel()} · ${$('start').value} — ${$('end').value} BJT · ${hourLabel()}${rain&&needsThreshold()&&chartMode!=='threshold'?` · ≥${thresholdValue()} mm`:''}${ds.reference?` · ${stationDataset()?'站点实况':ds.reference}`:''}`;
+  if(stationWindowNote())$('filter-note').append(document.createElement('br'),stationWindowNote());
+}
+
+/* ---------- dataset loading ---------- */
+function rowsLoaderFor(next){
+  return C.createRowsLoader(next,async path=>{
+    const query=new URLSearchParams(path.split('?')[1]);
+    if(Array.isArray(next.rows))return {dataset:query.get('dataset'),rows:next.rows.filter(r=>r.dataset===query.get('dataset')),snapshot_id:next.snapshot_id};
+    query.set('snapshot',next.snapshot_id);
+    const response=await fetch('./api/rows?'+query,{cache:'default',signal:AbortSignal.timeout(65000)});
+    if(!response.ok)throw Error('HTTP '+response.status);
+    return response.json();
   });
 }
-function empty(title='当前条件下没有可比较的样本',detail='请调整日期、时效或模式；可展开“样本明细”查看可用资料。'){return `<div class="empty"><strong>${esc(title)}</strong><span>${esc(detail)}</span></div>`;}
-function stats(rows){
-  const models=unique(rows.map(r=>r.model)),times=unique(rows.map(r=>r.valid)).sort(),pairs=unique(rows.map(r=>r.lead+'|'+r.valid));
-  const values=[['参与模式',models.length,'个','当前图表范围'],['参与时刻',times.length,'个','实际参与评分的时刻数'],['时效 / 时刻',pairs.length,'组','同一时效和有效时刻只计一次'],['资料截至',short(times.at(-1)),'','北京时间 BJT']];
-  $('stats').innerHTML=values.map(([l,v,u,n])=>`<div class="stat" title="${n}"><div class="stat-label">${l}</div><div class="stat-value">${v}<small>${u}</small></div></div>`).join('');
+async function chooseAccumulation(hours){
+  const target=catalog.datasets.find(d=>d.kind==='降水'&&d.accumulation===hours&&d.source===ds.source&&d.reference===ds.reference&&referenceMatches(d))||catalog.datasets.find(d=>d.kind==='降水'&&referenceMatches(d)&&d.accumulation===hours);
+  if(!target)return;
+  pendingMetric=metricKey;
+  $('dataset').value=target.id;
+  await setDataset();
 }
-function coverageDetails(raw,used){
-  const models=activeModels(),cov=C.sampleCoverage(raw,models,commonOptions()),included=useCommon();
-  const keys=unique(raw.map(r=>JSON.stringify([r.lead,r.valid]))).map(k=>JSON.parse(k)).sort((a,b)=>a[1].localeCompare(b[1])||a[0]-b[0]);
-  const recordKey=r=>JSON.stringify([r.model,r.lead,r.valid]),available=new Set(raw.map(recordKey)),retained=new Set(used.map(recordKey));
-  const grid=keys.length?`<div class="heatmap" style="grid-template-columns:160px repeat(${keys.length},minmax(13px,1fr))">${models.map(m=>`<span>${esc(label(m))}</span>`+keys.map(([lead,valid])=>{
-    const key=JSON.stringify([m,lead,valid]),state=retained.has(key)?'yes':available.has(key)?'excluded':'',cellLabel=state==='yes'?'参与当前结果':state==='excluded'?'有归档，被共同样本筛选排除':'未归档';
-    return `<span class="heat-cell ${state}" title="${esc(label(m))} · +${lead}h · ${full(valid)} BJT · ${cellLabel}"></span>`;
-  }).join('')).join('')}</div>`:'<p>所选范围没有归档记录。</p>';
-  return `<p>计数单位为“预报时效＋有效时间”，同一组合的多个阈值只计一次。共同样本逐阈值取交集；组合保留任一阈值即计入，具体阈值的时次数见评分明细。${commonOptions().acrossLeads?'各时效进一步使用同一组有效时间。':'各时效分别匹配有效时间。'}这里的并集仅代表现有归档，不是理论应有资料量，也不保证各模式采用完全相同的${stationDataset()?'站点':'格点'}。</p><table><thead><tr><th>模式</th><th>可用组合</th><th>参与组合</th><th>筛选排除</th></tr></thead><tbody>${cov.perModel.map(r=>`<tr><td>${esc(label(r.model))}</td><td>${r.availableCount}</td><td>${included?r.commonCount:r.availableCount}</td><td>${included?r.excludedCount:0}</td></tr>`).join('')}</tbody></table><p class="coverage-legend">青色：参与结果　琥珀色：有归档但被筛除　灰色：未归档；悬停查看时效与时间。</p>${grid}`;
+async function chooseLevel(level){
+  const target=datasetsForGroup(currentGroup()).find(d=>d.level===level&&d.reference===ds.reference);
+  if(!target)return;
+  pendingMetric=metricKey;
+  $('dataset').value=target.id;
+  await setDataset();
 }
-function sampleSummary(raw,used){
-  const c=C.sampleCoverage(raw,activeModels(),commonOptions()),on=useCommon();
-  $('sample-title').textContent=`样本明细 · 可用 ${c.unionCount} 组${on?' · 共同 '+c.commonCount+' 组'+(c.excludedCount?' · 排除 '+c.excludedCount+' 组':''):''}`;
-  $('sample-details').innerHTML=coverageDetails(raw,used);
+async function chooseReference(reference){
+  const list=datasetsForGroup(currentGroup()),g=currentGroup();
+  const target=list.find(d=>d.reference===reference&&(d.accumulation??null)===(ds.accumulation??null)&&(d.element??null)===(g.element??ds.element??null)&&(kind!=='环流'||d.level===ds.level));
+  if(!target)return;
+  pendingMetric=metricKey;
+  $('dataset').value=target.id;
+  await setDataset();
 }
-function svgStart(title,w=1000,h=350){if(stationDataset()&&!title.includes('站点实况'))title='站点实况 · '+title;return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}"><title>${esc(title)} · ${esc($('chart-subtitle').textContent)}</title><rect width="100%" height="100%" fill="white"/>`;}
-function axes(metric,values,w=1000,h=350){const L=70,R=w-35,T=28,B=h-61;let lo=0,hi=1,vals=values.filter(Number.isFinite);if(!['TS','POD','FAR','MR','ETS','CC'].includes(metric)){lo=Math.min(0,...vals);hi=Math.max(metric==='BIAS'?1:0,...vals);const pad=(hi-lo||1)*.12;hi+=pad;if(lo<0)lo-=pad;}else if(['ETS','CC'].includes(metric)){lo=Math.min(0,...vals);if(lo<0)lo=-1;}const y=v=>B-(v-lo)/(hi-lo)*(B-T);let markup='';for(let i=0;i<=5;i++){const v=lo+(hi-lo)*i/5;markup+=`<line class="grid" x1="${L}" x2="${R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-12}" y="${y(v)+4}" text-anchor="end">${fmt(v,Math.abs(hi)>10?1:2)}</text>`;}markup+=`<path class="axis" fill="none" d="M${L} ${T}V${B}H${R}"/><text x="${L}" y="15">${esc(metric)} ${esc(unit())}</text>`;if(metric==='BIAS')markup+=`<line x1="${L}" x2="${R}" y1="${y(1)}" y2="${y(1)}" stroke="#a0bbc7" stroke-dasharray="4 4"/>`;return {L,R,T,B,y,markup};}
-function bars(data,xKey,xlabel){
-  if(!data.length)return empty();
-  const m=$('metric').value,models=numericFirst(unique(data.map(r=>r.model))),xs=xKey==='model'?models:unique(data.map(r=>r[xKey])).sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b)));
-  const a=axes(m,data.map(r=>r[m])),group=(a.R-a.L)/xs.length,bw=Math.min(37,group*.75/models.length);
-  let s=svgStart($('chart-title').textContent)+a.markup;
-  for(let j=0;j<xs.length;j++){
-    const center=a.L+group*(j+.5);
-    s+=`<text x="${center}" y="${a.B+24}" text-anchor="middle">${esc(xKey==='model'?displayModel(xs[j]):xs[j])}</text>`;
-    for(let k=0;k<models.length;k++){
-      if(xKey==='model'&&models[k]!==xs[j])continue;
-      const r=data.find(r=>r[xKey]===xs[j]&&r.model===models[k]),v=r?.[m],defined=Number.isFinite(v);
-      const x=xKey==='model'?center-bw/2:center+(k-models.length/2)*bw+2,width=Math.max(3,bw-4),zero=a.y(0),y=defined?a.y(v):zero;
-      const top=Math.min(zero,y),height=Math.max(1,Math.abs(y-zero)),hitWidth=Math.max(width,Math.min(18,bw)),hitHeight=Math.max(18,height);
-      const hitY=Math.max(a.T,Math.min(a.B-hitHeight,top+height/2-hitHeight/2));
-      const label=`${displayModel(models[k])} · ${xlabel} ${xKey==='model'?displayModel(xs[j]):xs[j]}\n${m}: ${fmt(v)}${!defined?'（无定义或缺测）':''}\n${r?'有效时次: '+(r.cycles??1)+' · 样本: '+(r.n??'未记录'):'无可用样本'}`;
-      s+=`<g class="point"><title>${esc(label)}</title>`;
-      s+=defined?`<rect class="bar-shape" x="${x}" y="${top}" width="${width}" height="${height}" rx="2" fill="${color(models[k])}"/>`:`<text x="${x+bw/2}" y="${a.B-5}" text-anchor="middle">—</text>`;
-      s+=`<rect class="point-hitbox" x="${x+width/2-hitWidth/2}" y="${hitY}" width="${hitWidth}" height="${hitHeight}" fill="transparent" pointer-events="all"/></g>`;
+function options(el,items,value){el.replaceChildren(...items.map(([v,text])=>{const o=document.createElement('option');o.value=v;o.textContent=text;return o;}));if(items.some(x=>String(x[0])===String(value)))el.value=value;}
+async function loadGroup(g,metric){
+  if(!catalog)return false;
+  if(!(await window.GridVerification.open()))return false;
+  if(gridReference==='station'&&['降水','气温','地面'].includes(g.kind))await ensureStationRows();
+  gridReference=gridReference==='station'?'station':'grid';
+  const list=datasetsForGroup(g);
+  if(!list.length){
+    $('chart').innerHTML=empty('该要素暂无可用归档');
+    return false;
+  }
+  const target=preferredDatasetFor(g)||list[0];
+  pendingMetric=metric??null;
+  options($('dataset'),list.map(d=>[d.id,labelFor(d)]),target.id);
+  groupId=g.id;kind=g.kind;
+  if(g.field)circulationField=g.field;
+  $('grid-workspace').dataset.activeKind=g.id;
+  $('page-title').textContent=`${g.label} · ${metricTitle(pendingMetric||groupMetricDefs(g)[0]?.key||metricKey)}`;
+  $('page-subtitle').textContent='读取资料…';
+  return setDataset();
+}
+async function setDataset(){
+  const previousDataset=ds?.id;
+  ds=catalog.datasets.find(d=>d.id===$('dataset').value);
+  if(ds?.id!==previousDataset)automaticModels=true;
+  if(!ds){$('chart').innerHTML=empty('该要素暂无可用归档');return false;}
+  const target=ds,current=++rowsSequence,loader=rowsLoader;
+  const initialRange=target.source==='station'?stationDateRange(target):null;
+  rowsReadyId=null;datasetRows=[];tableState={rows:[],columns:[],xKey:'lead',xs:[]};
+  $('chart').innerHTML=empty('读取资料…','正在读取'+kind+'检验结果。');
+  $('results-table').innerHTML='';$('legend').innerHTML='';$('table-note').textContent='读取资料…';$('updated').textContent='';
+  $('export-csv').disabled=true;$('export-svg').disabled=true;$('load-error').hidden=true;
+  $('catalog-status-wrap').hidden=false;$('catalog-status').textContent='读取'+kind+'资料…';
+  $('grid-workspace').setAttribute('aria-busy','true');
+  try{
+    const loaded=target.source==='station'?{datasets:[target],rows:await loadStationDataset(target,initialRange)}
+      :C.demoCatalog(await loader.load(target),window.DemoModels.profiles(),WN3);
+    if(current!==rowsSequence||loader!==rowsLoader)return false;
+    ds=loaded.datasets.find(d=>d.id===target.id);
+    if(!ds)throw Error('暂无可识别的检验归档');
+    catalog.datasets=catalog.datasets.map(d=>d.id===ds.id?ds:d);
+    datasetRows=loaded.rows.filter(r=>r.dataset===ds.id);rowsReadyId=ds.id;
+    stationRowsRange=initialRange;
+    preferences.groupDatasets[groupId]=ds.id;
+  }catch(error){
+    if(current!==rowsSequence||loader!==rowsLoader)return false;
+    $('load-error').hidden=false;$('load-error').textContent='检验资料暂时无法读取，请稍后点击“刷新资料”重试。';
+    $('catalog-status').textContent='资料暂不可用';$('chart').innerHTML=empty('资料暂不可用','请稍后刷新或更换条件。');
+    return false;
+  }finally{if(current===rowsSequence)$('grid-workspace').setAttribute('aria-busy','false');}
+  const saved=preferences.datasets[ds.id]||{};
+  const remembered=saved.models||defaultModels(ds);
+  const oldRoster=saved.knownModels||ds.models;
+  const introduced=ds.models.filter(m=>!window.DemoModels.profile(m)&&!oldRoster.includes(m)&&datasetRows.some(r=>r.model===m));
+  selected=new Set([...remembered,...introduced].filter(m=>ds.models.includes(m)));
+  const defs=groupMetricDefs(currentGroup());
+  const wanted=(pendingMetric===null?[saved.metric]:[pendingMetric,saved.metric,metricKey]).find(m=>m&&defs.some(d=>d.key===m));
+  pendingMetric=null;
+  metricKey=wanted||defs[0]?.key||'TS';
+  if(defs.some(d=>d.key==='performance')&&metricKey==='performance')chartMode='lead';
+  options($('metric'),defs.map(d=>[d.key,d.label]),metricKey);
+  options($('threshold'),(ds.thresholds||[]).map(t=>[t,'≥ '+t]),saved.threshold??ds.thresholds?.[0]??.1);
+  $('metric').value=metricKey;
+  const lead=saved.lead??24;
+  const shownLeads=displayLeads(ds);
+  stateLead=shownLeads.includes(Number(lead))?Number(lead):(shownLeads.includes(24)?24:(shownLeads[0]??24));
+  options($('lead'),shownLeads.map(l=>[l,'+'+l+' 小时']),stateLead);
+  $('hour').value=['all','08','20'].includes(saved.hour)?saved.hour:'all';
+  $('common').checked=true;$('across-leads').checked=false;
+  const savedPreset=[3,7,15].includes(Number(saved.days))?Number(saved.days):7;
+  setDates(savedPreset);
+  if(saved.start&&saved.end&&useSavedDates(ds,saved)){
+    const presetStart=$('start').value,presetEnd=$('end').value;
+    $('start').value=saved.start;$('end').value=saved.end;clampStationDates();
+    datePreset=$('start').value===presetStart&&$('end').value===presetEnd?savedPreset:null;
+  }
+  $('grid-workspace').dataset.activeKind=groupId;
+  renderNav();render();
+  $('catalog-status').textContent='';$('catalog-status-wrap').hidden=true;
+  return true;
+}
+function stationDateRange(dataset){
+  const saved=preferences.datasets[dataset.id]||{},preset=[3,7,15].includes(Number(saved.days))?Number(saved.days):7;
+  const nmicEnd=stationWindow(dataset),latest=dataset.end.slice(0,10),today=C.calendarWindow(1).end;
+  const now=nmicEnd||latest<today?Date.parse((nmicEnd||latest)+'T12:00:00+08:00'):Date.now();
+  const range=C.calendarWindow(preset,now);
+  const bounds=stationDateBounds(dataset);
+  for(const id of ['start','end']){
+    if(saved[id]&&useSavedDates(dataset,saved))range[id]=[saved[id],today].sort()[0];
+    range[id]=range[id]<bounds.start?bounds.start:range[id]>bounds.end?bounds.end:range[id];
+  }
+  const leads=displayLeads(dataset);
+  if(leads.length)range.leads=leads.join(',');
+  if(scoreStation)range.station=scoreStation.id;
+  else if(stationRegion&&stationRegion!=='all')range.region=stationRegion;
+  return range;
+}
+function loadStationDataset(dataset,range){
+  const cache=stationRowsCache;
+  const key=dataset.id+'|'+range.start+'|'+range.end+'|'+(range.leads??'all')+'|'+(range.region||'all')+'|'+(range.station||'');
+  if(!cache.has(key))cache.set(key,(async()=>{
+    const response=await fetch('./api/stations/grid-rows?'+new URLSearchParams({dataset:dataset.id,...range,...(dataset.grid_snapshot?{generation:dataset.grid_snapshot}:{})}),{cache:'default',signal:AbortSignal.timeout(65000)});
+    if(!response.ok)throw Error('站点图表资料暂不可用');
+    const rows=await response.json();
+    if(!Array.isArray(rows)||rows.some(r=>r.dataset!==dataset.id))throw Error('站点图表资料暂不可用');
+    return rows;
+  })().catch(error=>{cache.delete(key);throw error;}));
+  return cache.get(key);
+}
+async function ensureStationRows(){
+  if(stationLoading)return stationLoading;
+  const target=catalog;
+  stationLoading=(async()=>{
+    const response=await fetch('./api/stations/grid-datasets',{cache:'no-store'});
+    if(!response.ok)throw Error('站点资料暂不可用');
+    const datasets=await response.json();if(!datasets.length)throw Error('站点共用图表尚未完成离线评分');
+    if(target!==catalog)return;
+    target.datasets.push(...C.demoCatalog({datasets},window.DemoModels.profiles(),WN3).datasets);
+    target.origins=[...(target.origins||[]),...datasets];
+  })().catch(error=>{stationLoading=null;throw error;});
+  return stationLoading;
+}
+
+/* ---------- rows ---------- */
+function baseRows(models,ignoreThreshold=false){
+  if(!ds)return [];
+  const start=$('start').value,end=$('end').value,hour=$('hour').value;
+  let rows=datasetRows.filter(r=>{
+    if(kind==='降水'&&r.grade)return false;
+    if(kind==='环流'&&!C.circulationHasScore(r,circulationField))return false;
+    if(metricKey!=='performance'&&!C.eligible(r,metricKey))return false;
+    if(r.valid.slice(0,10)<start||r.valid.slice(0,10)>end)return false;
+    if(hour!=='all'&&r.run.slice(11,13)!==hour)return false;
+    if(kind==='降水'&&!ignoreThreshold&&metricKey!=='performance'){
+      if(metricKey==='PC'){if(r.threshold!==.1)return false;}
+      else if(chartMode==='threshold'){if(!Number.isFinite(r.threshold))return false;}
+      else if(needsThreshold()&&r.threshold!==thresholdValue())return false;
+    }
+    if(kind==='降水'&&metricKey==='performance'&&!Number.isFinite(r.threshold))return false;
+    return true;
+  });
+  if(chartMode!=='lead'&&page==='metric')rows=rows.filter(r=>r.lead===stateLead);
+  return C.demoRows(rows,models,window.DemoModels.profiles(),WN3);
+}
+function scopedRows(models){
+  let rows=baseRows(models);
+  commonFallback=false;
+  if($('common').checked){
+    const common=C.commonTimes(rows,models,{metric:metricKey==='performance'?undefined:metricKey});
+    if(common.length)rows=common;
+    else commonFallback=true;
+  }
+  return rows;
+}
+function availableRowsForModels(){
+  if(!ds)return [];
+  let rows=datasetRows.filter(r=>{
+    if(kind==='降水'&&r.grade)return false;
+    if(kind==='环流'&&!C.circulationHasScore(r,circulationField))return false;
+    if(metricKey!=='performance'&&!C.eligible(r,metricKey))return false;
+    if(r.valid.slice(0,10)<$('start').value||r.valid.slice(0,10)>$('end').value)return false;
+    if($('hour').value!=='all'&&r.run.slice(11,13)!==$('hour').value)return false;
+    if(kind==='降水'&&metricKey!=='performance'){
+      if(metricKey==='PC'&&r.threshold!==.1)return false;
+      if(needsThreshold()&&chartMode!=='threshold'&&r.threshold!==thresholdValue())return false;
+    }
+    return true;
+  });
+  return C.demoRows(rows,ds.models,window.DemoModels.profiles(),WN3);
+}
+
+/* ---------- model chips ---------- */
+function modelControls(availableRows=null){
+  if(!ds)return;
+  const models=numericFirst([...(ds.supported_models||ds.models)]);
+  const buttons=models.map(m=>{
+    const b=document.createElement('button');b.type='button';b.className='model-chip';b.dataset.model=m;
+    const archived=ds.models.includes(m),available=archived&&(availableRows===null||availableRows.some(r=>r.model===m)),demo=window.DemoModels.profile(m);
+    b.setAttribute('aria-pressed',String(selected.has(m)));b.disabled=!archived;
+    const issue=!archived?ds.model_issues?.[m]:null;
+    b.title=demo?displayModel(m):available?displayModel(m):issue?displayModel(m)+'：'+issue:displayModel(m)+' 在当前日期、起报时次下没有'+labelFor(ds)+'评分';
+    b.innerHTML=`<i style="background:${color(m)}"></i>${esc(label(m))}${available?'':' · 当前条件无资料'}`;
+    b.onclick=()=>{automaticModels=false;selected.has(m)?selected.delete(m):selected.add(m);render();};
+    return b;
+  });
+  // One row per forecast system (短临/短期/中期/台风…); the system name selects its whole row.
+  const {nowcasting,short_range,...otherSystems}=window.DemoModels.groups();
+  const systems=new Map(Object.entries({nowcasting,short_range,global:'中期预报系统',...otherSystems,other:'其他预报系统'})
+    .filter(([,title])=>title).map(([id,title])=>[id,{title,buttons:[]}]));
+  for(const b of buttons){
+    const m=b.dataset.model,system=window.DemoModels.profile(m)?.group||(Object.hasOwn(names,m)?'global':'other');
+    (systems.get(system)||systems.get('other')).buttons.push(b);
+  }
+  $('models').replaceChildren(...[...systems].filter(([,system])=>system.buttons.length).map(([id,system])=>{
+    const group=document.createElement('div'),title=document.createElement('h3'),all=document.createElement('button'),chips=document.createElement('div');
+    const usable=system.buttons.filter(b=>!b.disabled).map(b=>b.dataset.model);
+    group.className='model-system-group';group.setAttribute('role','group');group.setAttribute('aria-label',system.title);
+    all.type='button';all.className='model-system-title';all.dataset.system=id;all.textContent=system.title;
+    all.disabled=!usable.length;
+    all.setAttribute('aria-pressed',String(usable.length>0&&selected.size===usable.length&&usable.every(m=>selected.has(m))));
+    all.title=all.disabled?system.title+'暂无'+labelFor(ds)+'评分':`只看${system.title}的全部 ${usable.length} 个模式`;
+    all.onclick=()=>{automaticModels=false;selected=new Set(usable);render();};
+    title.append(all);chips.className='model-chips';chips.append(...system.buttons);
+    group.append(title,chips);return group;
+  }));
+}
+
+/* ---------- aggregation ---------- */
+function withDemoIdentity(data,raw){
+  const info=new Map(raw.filter(r=>r.is_demo).map(r=>[r.model,{is_demo:true,source_model:r.source_model,target_product_id:r.target_product_id,excluded_from_official_scores:true}]));
+  return data.map(r=>info.has(r.model)?{...r,...info.get(r.model)}:r);
+}
+function chartRows(){
+  const models=activeModels();
+  const raw=scopedRows(models);
+  if(metricKey==='performance')return {raw,data:withDemoIdentity(C.grouped(raw,['model','threshold']),raw)};
+  const xKey=chartMode==='date'?'valid':chartMode==='threshold'?'threshold':'lead';
+  return {raw,xKey,data:withDemoIdentity(C.grouped(raw,['model',xKey]),raw)};
+}
+function activeModels(){return [...selected];}
+// Regular lead ticks: the accumulation step (3 h for instantaneous elements) up to 72 h,
+// then the same step but never finer than 6 h, so 6 h and 12 h rain keep their spacing all
+// the way. One tick per day beyond 72 h always landed on the same clock hours and missed
+// the afternoon, so the later leads looked better than they are. Rows are fetched for these leads only,
+// so a default page stays a few MB instead of every hourly lead.
+// Station scores can be narrowed to the same regions as the station map presets.
+function regionControls(){
+  const show=stationDataset();
+  $('region-field').hidden=!show;$('station-field').hidden=!show;
+  if(!show)return;
+  stationPickSync();ensureStationSites();
+  $('region-switch').replaceChildren(...['all','hn','hun','gba','sz','hk','xj'].map(region=>{
+    const b=document.createElement('button');b.type='button';b.dataset.region=region;
+    b.textContent=stationRegionLabels[region];
+    b.setAttribute('aria-pressed',String(!scoreStation&&stationRegion===region));
+    b.onclick=()=>setStationRegion(region);return b;
+  }));
+}
+function stationPickSync(){
+  const input=$('station-pick'),active=Boolean(scoreStation);
+  if(document.activeElement!==input)input.value=active?stationPickText(scoreStation):'';
+  input.classList.toggle('chosen',active);
+  $('station-score-reset').hidden=!active;
+}
+function ensureStationSites(){
+  if(stationSites||stationSitesLoading)return;
+  stationSitesLoading=fetch('./api/stations/meta',{cache:'no-store'}).then(response=>response.ok?response.json():Promise.reject(Error('HTTP '+response.status))).then(meta=>{
+    stationSites=(meta.stations||[]).map(site=>({id:String(site.id),name:site.name||String(site.id)}));
+    $('station-pick-list').replaceChildren(...stationSites.map(site=>new Option(stationPickText(site))));
+    if(scoreStation){
+      // A station that came from the address bar only has its id until the list arrives.
+      const known=stationSites.find(site=>site.id===scoreStation.id);
+      if(!known)setStationRegion(stationRegion);
+      else if(known.name!==scoreStation.name){scoreStation={...known};render({skipStationEvent:true});document.dispatchEvent(new CustomEvent('gridstationscopechange'));}
+    }
+    stationPickSync();
+  }).catch(()=>{}).finally(()=>{stationSitesLoading=null;});
+}
+// A list choice arrives as the full “站名（站号）” text; typed text may be a station id,
+// a full station name, or any fragment that matches exactly one station.
+function stationPickMatch(text,loose){
+  if(!stationSites||!text)return null;
+  const full=stationSites.find(site=>stationPickText(site)===text);
+  if(full||!loose)return full||null;
+  const lower=text.toLowerCase();
+  const exact=stationSites.find(site=>site.id.toLowerCase()===lower)||stationSites.find(site=>site.name===text);
+  if(exact)return exact;
+  const partial=stationSites.filter(site=>stationPickText(site).toLowerCase().includes(lower));
+  return partial.length===1?partial[0]:partial.length?'several':null;
+}
+function stationPickCommit(loose){
+  const input=$('station-pick'),text=input.value.trim(),site=stationPickMatch(text,loose);
+  if(!site||site==='several'){
+    if(loose&&text)input.placeholder=!stationSites?'站点列表读取中，请稍后再试':site?`“${text}”对应多个站，请从列表中选`:`没有找到“${text}”`;
+    return false;
+  }
+  input.placeholder='输入站名或站号';input.blur();
+  if(site.id!==scoreStation?.id)setStationScore(site);
+  stationPickSync();
+  return true;
+}
+function displayLeads(dataset){
+  const leads=[...new Set((dataset?.leads||[]).filter(Number.isFinite))].sort((a,b)=>a-b);
+  const step=Math.max(3,Number(dataset?.accumulation)||3);
+  const late=Math.max(6,Number(dataset?.accumulation)||0);
+  const nice=leads.filter(l=>l<=72?l%step===0:l%late===0);
+  return nice.length>=2?nice:sampleX(leads);
+}
+function sampleX(values,max=40){
+  const sorted=[...values].sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b)));
+  if(sorted.length<=max)return sorted;
+  const out=[],seen=new Set(),step=(sorted.length-1)/(max-1);
+  for(let i=0;i<max;i++){const index=Math.round(i*step);if(!seen.has(index)){seen.add(index);out.push(sorted[index]);}}
+  return out;
+}
+function xLabelText(x,xKey){return xKey==='valid'?short(x):String(x);}
+function issueRange(rows){const dates=unique(rows.map(r=>r.run?.slice(0,10)).filter(Boolean)).sort();return dates.length?`${dates[0]} — ${dates.at(-1)}`:'';}
+function metricCellText(v,m){return finite(v)&&v!==-999?C.percentMetrics.includes(m)?(v*100).toFixed(1)+'%':fmt(v,3):'—';}
+function metricTick(v,m){return C.percentMetrics.includes(m)?(v*100).toFixed(0)+'%':fmt(v,Math.abs(v)>=10?1:2);}
+function bestPolicy(m){
+  if(['RMSE','MAE','VRMSE','FAR','MR','FAR'].includes(m))return 'min';
+  if(m==='ME')return 'abs';
+  if(m==='BIAS')return 'one';
+  return 'max';
+}
+function shownValue(v){return Number.isFinite(v)&&v!==-999?Math.round(v*1000):null;}
+function bestSet(values,m){
+  const displayed=values.map(shownValue).filter(v=>v!==null);
+  if(new Set(displayed).size<=1)return new Set();
+  const policy=bestPolicy(m);
+  let best;
+  if(policy==='min')best=Math.min(...displayed);
+  else if(policy==='abs')best=displayed.reduce((a,b)=>Math.abs(b)<Math.abs(a)?b:a);
+  else if(policy==='one')best=displayed.reduce((a,b)=>Math.abs(b-1000)<Math.abs(a-1000)?b:a);
+  else best=Math.max(...displayed);
+  return new Set(displayed.filter(v=>v===best));
+}
+
+/* ---------- charts ---------- */
+function svgStart(title,w=1000,h=380){
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}"><title>${esc(title)}</title><rect width="100%" height="100%" fill="white"/>`;
+}
+function yDomain(values,m){
+  const vals=values.filter(v=>finite(v)&&v!==-999);
+  if(!vals.length)return {lo:0,hi:1};
+  const bounded=['TS','ETS','POD','FAR','MR','PC','ACC1','ACC2','CC','BIAS'].includes(m);
+  if(bounded){
+    const lo=m==='CC'||m==='ETS'?Math.min(0,...vals):0;
+    const hi=Math.max(1,...vals);
+    return {lo:lo<0?-1:0,hi:hi>1?Math.ceil(hi*10)/10:1};
+  }
+  let lo=Math.min(0,...vals),hi=Math.max(0,...vals);
+  if(hi===lo)hi=lo+1;
+  const pad=(hi-lo)*.12;if(lo<0)lo-=pad;hi+=pad;
+  return {lo,hi};
+}
+function lineChartSvg(data,xKey,xs,secondRow){
+  if(!data.length||!xs.length)return empty();
+  const m=metricKey,W=1000,L=68,R=W-28,T=30,height=secondRow?400:370,B=height-(secondRow?82:56);
+  const models=numericFirst(unique(data.map(r=>r.model)));
+  const {lo,hi}=yDomain(data.map(r=>r[m]),m),y=v=>B-(v-lo)/(hi-lo||1)*(B-T);
+  const numeric=v=>xKey==='valid'?Date.parse(v+'+08:00'):Number(v),xmin=numeric(xs[0]),xmax=numeric(xs.at(-1));
+  const x=v=>xs.length===1?(L+R)/2:L+(numeric(v)-xmin)/(xmax-xmin||1)*(R-L);
+  let svg=svgStart($('chart-title').textContent,W,height);
+  for(let i=0;i<=5;i++){
+    const v=lo+(hi-lo)*i/5;
+    svg+=`<line class="grid" x1="${L}" x2="${R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-12}" y="${y(v)+4}" text-anchor="end">${esc(metricTick(v,m))}</text>`;
+  }
+  svg+=`<path class="axis" fill="none" d="M${L} ${T}V${B}H${R}"/><line class="hover-guide" x1="0" x2="0" y1="${T}" y2="${B}" style="display:none"/>`;
+  if(m==='BIAS'&&lo<=1&&hi>=1)svg+=`<line x1="${L}" x2="${R}" y1="${y(1)}" y2="${y(1)}" stroke="#a0bbc7" stroke-dasharray="4 4"/>`;
+  const stride=Math.max(1,Math.ceil(xs.length/12));
+  xs.forEach((v,i)=>{
+    if(i%stride!==0&&i!==xs.length-1)return;
+    svg+=`<text x="${x(v)}" y="${B+24}" text-anchor="middle">${esc(xLabelText(v,xKey))}</text>`;
+    if(secondRow)svg+=`<text x="${x(v)}" y="${B+47}" text-anchor="middle" style="fill:#8797a3;font-size:12px">${esc(validHourText(v))}</text>`;
+  });
+  svg+=`<text x="${(L+R)/2}" y="${height-(secondRow?10:8)}" text-anchor="middle">${esc(xKey==='valid'?'有效时间（北京时间）':'预报时效（小时）')}${secondRow?' / 检验时刻（北京）':''}</text>`;
+  for(const model of models){
+    let segment=[],segments=[];
+    for(const xv of xs){
+      const row=data.find(r=>r.model===model&&r[xKey]===xv),v=row?.[m];
+      if(finite(v)&&v!==-999)segment.push([x(xv),y(v)]);else if(segment.length){segments.push(segment);segment=[];}
+    }
+    if(segment.length)segments.push(segment);
+    for(const seg of segments)svg+=`<polyline points="${seg.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="${color(model)}" stroke-width="2.2" opacity=".85"/>`;
+    for(const xv of xs){
+      const row=data.find(r=>r.model===model&&r[xKey]===xv),v=row?.[m];
+      if(!finite(v)||v===-999)continue;
+      const tip=`${displayModel(model)} · ${xKey==='valid'?full(xv):'+'+xv+'h'}\n${m}: ${metricCellText(v,m)}\n有效时次: ${row.cycles??1} · 样本: ${row.n??'未记录'}`;
+      svg+=`<circle class="point" cx="${x(xv).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" fill="${color(model)}" data-gx="${xs.indexOf(xv)}" data-gl="${esc(xKey==='valid'?full(xv):'+'+xv+'h'+(secondRow?' · 检验 '+validHourText(xv):''))}" data-gm="${esc(displayModel(model))}" data-gv="${esc(metricCellText(v,m))}" data-gy="${v}" data-gn="${esc(String(row.n??''))}"><title>${esc(tip)}</title></circle>`;
     }
   }
-  return s+`<text x="${(a.L+a.R)/2}" y="337" text-anchor="middle">${esc(xlabel)}</text></svg>`;
+  return svg+'</svg>';
 }
-let chartValueEvents=null;
+// Grouped bars: one cluster per rainfall threshold, one bar per model, at a fixed lead.
+function thresholdBarSvg(data,xs){
+  if(!data.length||!xs.length)return empty();
+  const m=metricKey,W=1000,L=68,R=W-28,T=30,height=370,B=height-56;
+  const models=numericFirst(unique(data.map(r=>r.model)));
+  const {lo,hi}=yDomain(data.map(r=>r[m]),m),y=v=>B-(v-lo)/(hi-lo||1)*(B-T);
+  const slot=(R-L)/xs.length,bar=Math.min(46,slot*.8/models.length),left=i=>L+slot*i+(slot-bar*models.length)/2;
+  const labelled=bar>=30;
+  let svg=svgStart($('chart-title').textContent,W,height);
+  for(let i=0;i<=5;i++){
+    const v=lo+(hi-lo)*i/5;
+    svg+=`<line class="grid" x1="${L}" x2="${R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-12}" y="${y(v)+4}" text-anchor="end">${esc(metricTick(v,m))}</text>`;
+  }
+  svg+=`<path class="axis" fill="none" d="M${L} ${T}V${B}H${R}"/>`;
+  if(lo<0)svg+=`<line x1="${L}" x2="${R}" y1="${y(0)}" y2="${y(0)}" stroke="#8ea4b0"/>`;
+  if(m==='BIAS'&&lo<=1&&hi>=1)svg+=`<line x1="${L}" x2="${R}" y1="${y(1)}" y2="${y(1)}" stroke="#a0bbc7" stroke-dasharray="4 4"/>`;
+  xs.forEach((t,i)=>{
+    const centre=L+slot*(i+.5);
+    svg+=`<text x="${centre}" y="${B+24}" text-anchor="middle">≥${esc(String(t))}</text>`;
+    models.forEach((model,j)=>{
+      const row=data.find(r=>r.model===model&&r.threshold===t),v=row?.[m];
+      if(!finite(v)||v===-999)return;
+      const x0=left(i)+bar*j,top=Math.min(y(v),y(0)),h=Math.max(1,Math.abs(y(v)-y(0)));
+      const tip=`${displayModel(model)} · ≥${t} mm · +${stateLead}h\n${m}: ${metricCellText(v,m)}\n有效时次: ${row.cycles??1} · 样本: ${row.n??'未记录'}`;
+      svg+=`<rect class="point" x="${(x0+1).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(1,bar-2).toFixed(1)}" height="${h.toFixed(1)}" fill="${color(model)}" opacity=".9" data-cx="${centre.toFixed(1)}" data-gx="${i}" data-gl="${esc('≥'+t+' mm · +'+stateLead+'h')}" data-gm="${esc(displayModel(model))}" data-gv="${esc(metricCellText(v,m))}" data-gy="${v}" data-gn="${esc(String(row.n??''))}"><title>${esc(tip)}</title></rect>`;
+      if(labelled)svg+=`<text x="${(x0+bar/2).toFixed(1)}" y="${(v<0?top+h+13:top-5).toFixed(1)}" text-anchor="middle" style="font-size:11px;fill:#4a6474;pointer-events:none">${esc(metricCellText(v,m))}</text>`;
+    });
+  });
+  svg+=`<text x="${(L+R)/2}" y="${height-8}" text-anchor="middle">降水阈值（mm）</text>`;
+  return svg+'</svg>';
+}
 function chartValues(){
   chartValueEvents?.abort();
   const chart=$('chart'),points=[...chart.querySelectorAll('.point')];
@@ -405,253 +756,443 @@ function chartValues(){
   const hide=()=>{tip.hidden=true;if(pinned){pinned.classList.remove('is-selected');pinned.setAttribute('aria-pressed','false');}pinned=null;};
   const show=(point,event)=>{
     if(pinned&&pinned!==point)return;
-    const label=point.getAttribute('aria-label');if(tip.textContent!==label)tip.textContent=label;
+    clearGroup();pinnedGroup=null;
+    const text=point.getAttribute('aria-label');if(tip.textContent!==text)tip.textContent=text;
     tip.hidden=false;
     const box=point.getBoundingClientRect(),x=event?.clientX??box.left+box.width/2,y=event?.clientY??box.top;
     const w=tip.offsetWidth,h=tip.offsetHeight;
     tip.style.left=Math.max(10,Math.min(innerWidth-w-10,x+12))+'px';
     tip.style.top=Math.max(10,Math.min(innerHeight-h-10,y-h-12<10?y+15:y-h-12))+'px';
   };
+  const place=(x,y)=>{
+    const w=tip.offsetWidth,h=tip.offsetHeight;
+    tip.style.left=Math.max(10,Math.min(innerWidth-w-10,x+16+w>innerWidth-10?x-w-16:x+16))+'px';
+    tip.style.top=Math.max(10,Math.min(innerHeight-h-10,y-h/2))+'px';
+  };
+  let pinnedGroup=null,shownGroup=null;
+  const clearGroup=()=>{
+    if(!shownGroup)return;
+    shownGroup.points.forEach(p=>p.classList.remove('is-near'));
+    const guide=shownGroup.svg.querySelector('.hover-guide');if(guide)guide.style.display='none';
+    shownGroup=null;tip.classList.remove('is-group');
+  };
+  const showGroup=(group,event)=>{
+    if(shownGroup!==group){
+      clearGroup();shownGroup=group;
+      const head=document.createElement('strong');head.textContent=group.points[0].dataset.gl;
+      const rows=[...group.points].sort((a,b)=>Number(b.dataset.gy)-Number(a.dataset.gy)).map(point=>{
+        const row=document.createElement('div'),dot=document.createElement('i'),name=document.createElement('span'),value=document.createElement('b'),n=document.createElement('small');
+        row.className='tip-row';dot.style.background=point.getAttribute('fill');name.textContent=point.dataset.gm;value.textContent=point.dataset.gv;n.textContent=point.dataset.gn?'样本 '+point.dataset.gn:'';
+        row.append(dot,name,value,n);return row;
+      });
+      tip.classList.add('is-group');tip.replaceChildren(head,...rows);
+      group.points.forEach(p=>p.classList.add('is-near'));
+      const guide=group.svg.querySelector('.hover-guide');
+      if(guide){const cx=group.points[0].getAttribute('cx');guide.setAttribute('x1',cx);guide.setAttribute('x2',cx);guide.style.display='';}
+    }
+    tip.hidden=false;
+    const box=group.points[0].getBoundingClientRect();
+    place(event?.clientX??box.left+box.width/2,event?.clientY??box.top);
+  };
+  const hideGroup=()=>{clearGroup();pinnedGroup=null;tip.hidden=true;};
+  for(const svg of chart.querySelectorAll('svg')){
+    const byX=new Map();
+    for(const point of svg.querySelectorAll('.point[data-gx]')){
+      if(!byX.has(point.dataset.gx))byX.set(point.dataset.gx,{svg,points:[],cx:Number(point.getAttribute('cx')??point.dataset.cx)});
+      byX.get(point.dataset.gx).points.push(point);
+    }
+    const groups=[...byX.values()];if(!groups.length)continue;
+    const nearest=event=>{
+      const box=svg.getBoundingClientRect(),width=Number((svg.getAttribute('viewBox')||'').split(/\s+/)[2])||box.width;
+      const sx=box.width?(event.clientX-box.left)/box.width*width:groups[0].cx;
+      return groups.reduce((best,g)=>Math.abs(g.cx-sx)<Math.abs(best.cx-sx)?g:best);
+    };
+    svg.addEventListener('pointermove',event=>{if(pinned||pinnedGroup)return;showGroup(nearest(event),event);},{signal});
+    svg.addEventListener('pointerleave',()=>{if(!pinned&&!pinnedGroup)hideGroup();},{signal});
+    svg.addEventListener('click',event=>{
+      event.stopPropagation();
+      const group=nearest(event),same=pinnedGroup===group;
+      hide();hideGroup();
+      if(!same){showGroup(group,event);pinnedGroup=group;}
+    },{signal});
+  }
   const toggle=(point,event)=>{
     if(pinned===point){hide();return;}
     hide();pinned=point;point.classList.add('is-selected');point.setAttribute('aria-pressed','true');show(point,event);
   };
   for(const point of points){
     const title=point.querySelector('title');if(!title)continue;
-    const label=title.textContent;point.setAttribute('aria-label',label);point.setAttribute('role','button');point.setAttribute('tabindex','0');point.setAttribute('aria-pressed','false');
-    const description=document.createElementNS('http://www.w3.org/2000/svg','desc');description.textContent=label;title.replaceWith(description);
-    point.addEventListener('pointerenter',event=>show(point,event),{signal});
-    point.addEventListener('pointermove',event=>show(point,event),{signal});
-    point.addEventListener('pointerleave',()=>{if(!pinned)tip.hidden=true;},{signal});
+    const text=title.textContent;point.setAttribute('aria-label',text);point.setAttribute('role','button');point.setAttribute('tabindex','0');point.setAttribute('aria-pressed','false');
+    const desc=document.createElementNS('http://www.w3.org/2000/svg','desc');desc.textContent=text;title.replaceWith(desc);
+    const grouped=point.dataset.gx!==undefined;
+    if(!grouped){
+      point.addEventListener('pointerenter',event=>show(point,event),{signal});
+      point.addEventListener('pointermove',event=>show(point,event),{signal});
+      point.addEventListener('pointerleave',()=>{if(!pinned)tip.hidden=true;},{signal});
+      point.addEventListener('click',event=>toggle(point,event),{signal});
+    }
     point.addEventListener('focus',()=>show(point),{signal});
     point.addEventListener('blur',()=>{if(!pinned)tip.hidden=true;},{signal});
-    point.addEventListener('click',event=>toggle(point,event),{signal});
     point.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle(point);}},{signal});
   }
-  chart.addEventListener('click',event=>{if(!event.target.closest('.point'))hide();},{signal});
-  document.addEventListener('click',event=>{if(!chart.contains(event.target))hide();},{signal});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape')hide();},{signal});
-  const reposition=()=>{
-    if(!pinned){tip.hidden=true;return;}
-    const box=pinned.getBoundingClientRect();
-    if(box.bottom<0||box.top>innerHeight||box.right<0||box.left>innerWidth){hide();return;}
-    show(pinned);
-  };
-  window.addEventListener('resize',reposition,{signal});
-  window.addEventListener('scroll',reposition,{signal,capture:true});
+  chart.addEventListener('click',event=>{if(!event.target.closest('.point')){hide();hideGroup();}},{signal});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'){hide();hideGroup();}},{signal});
 }
+let chartValueEvents=null;
 
-function lines(data,xKey,xlabel){if(!data.length)return empty();const m=$('metric').value,models=unique(data.map(r=>r.model)),xs=unique(data.map(r=>r[xKey])).sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b))),a=axes(m,data.map(r=>r[m]));const numeric=v=>xKey==='valid'?Date.parse(v+'+08:00'):Number(v),min=numeric(xs[0]),max=numeric(xs.at(-1)),x=v=>xs.length===1?(a.L+a.R)/2:a.L+(numeric(v)-min)/(max-min)*(a.R-a.L);let s=svgStart($('chart-title').textContent)+a.markup;const stride=Math.ceil(xs.length/7);xs.forEach((v,i)=>{if(i%stride===0||i===xs.length-1)s+=`<text x="${x(v)}" y="${a.B+23}" text-anchor="middle">${esc(xKey==='valid'?short(v):'+'+v+'h')}</text>`;});for(const model of models){let segment=[],segments=[],last=null;for(const xv of xs){const r=data.find(r=>r[xKey]===xv&&r.model===model),v=r?.[m],gap=xKey==='valid'&&last!==null&&numeric(xv)-numeric(last)>(ds.source==='weekly'||kind==='环流'?6:12)*3600000;if(!Number.isFinite(v)||gap){if(segment.length)segments.push(segment);segment=[];}if(Number.isFinite(v)){segment.push(`${x(xv)},${a.y(v)}`);s+=`<circle class="point" cx="${x(xv)}" cy="${a.y(v)}" r="4" fill="${color(model)}"><title>${esc(label(model))} · ${esc(xKey==='valid'?full(xv):'+'+xv+'h')}\n${m}: ${fmt(v)}\n有效时次: ${r.cycles??1}</title></circle>`;}last=xv;}if(segment.length)segments.push(segment);for(const seg of segments)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${color(model)}" stroke-width="2" opacity=".8"/>`;}
-  return s+`<text x="${(a.L+a.R)/2}" y="337" text-anchor="middle">${esc(xlabel)}</text></svg>`;
-}
-function performance(data){if(!data.length)return empty();const L=235,T=25,size=330,B=T+size,R=L+size,x=v=>L+v*size,y=v=>B-v*size;let s=svgStart('降水评分综合图',1000,420);for(let i=0;i<=10;i++){const v=i/10;s+=`<path class="grid" d="M${x(v)} ${T}V${B}M${L} ${y(v)}H${R}"/>`;if(i%2===0)s+=`<text x="${x(v)}" y="${B+21}" text-anchor="middle">${v.toFixed(1)}</text><text x="${L-14}" y="${y(v)+4}" text-anchor="end">${v.toFixed(1)}</text>`;}
-  for(const ts of [.1,.2,.3,.4,.5,.6,.7,.8,.9]){const pts=[];for(let i=1;i<=250;i++){const xx=i/250,yy=ts*xx/(xx*(1+ts)-ts);if(yy>=0&&yy<=1)pts.push(`${x(xx)},${y(yy)}`);}s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="#cfac74" stroke-width="1.1"/><text x="${R+8}" y="${y(ts)+3}" style="fill:#b4935a;font-size:10px">${ts.toFixed(1)}</text>`;}
-  for(const bias of [.25,.5,1,2,4]){const xx=Math.min(1,1/bias),yy=xx*bias;s+=`<path d="M${L} ${B}L${x(xx)} ${y(yy)}" stroke="#8cb6c8" stroke-dasharray="4 4"/><text x="${x(xx)-8}" y="${y(yy)-6}" text-anchor="end" style="fill:#6798ae;font-size:10px">${bias}</text>`;}
-  let valid=0;for(const r of data){if(!Number.isFinite(r.POD)||!Number.isFinite(r.SR))continue;valid++;s+=`<circle class="point" cx="${x(r.SR)}" cy="${y(r.POD)}" r="6" fill="${color(r.model)}" stroke="white" stroke-width="2"><title>${esc(label(r.model))}\n成功率: ${fmt(r.SR)} · 命中率: ${fmt(r.POD)}\nTS: ${fmt(r.TS)} · BIAS: ${fmt(r.BIAS)}\nH ${r.H} / M ${r.M} / F ${r.F}</title></circle>`;}
-  s+=`<path class="axis" fill="none" d="M${L} ${T}V${B}H${R}"/><text x="${(L+R)/2}" y="${B+49}" text-anchor="middle">成功率（1 − FAR） →</text><text transform="translate(${L-48} ${(T+B)/2}) rotate(-90)" text-anchor="middle">命中率 POD →</text><text x="${R+85}" y="105" style="font-size:14px;fill:#315968">如何读图</text><text x="${R+85}" y="137">右上方：命中率与成功率更高</text><text x="${R+85}" y="166" style="fill:#b4935a">金色曲线：TS 等值线</text><text x="${R+85}" y="195" style="fill:#6798ae">蓝色虚线：BIAS，1 为无频率偏差</text><text x="${R+85}" y="230">有效点 ${valid} / ${data.length} 个模式</text><text x="${R+85}" y="257">分母为零时不绘制该模式点</text>`;
-  return s+'</svg>';
-}
-
-function matrix(data){
-  if(!data.length)return empty();
-  const metric=$('metric').value,leads=groupActive()?ds.leads.filter(l=>C.inLeadGroup(l,leadGroup)):ds.leads,thresholds=ds.thresholds,values=data.map(r=>r[metric]).filter(Number.isFinite),w=Math.max(1000,140+leads.length*60),left=110,top=58,cw=(w-left-30)/leads.length,ch=43,h=top+ch*thresholds.length+92;
-  const lo=metric==='ETS'?Math.min(0,...values):0,hi=['TS','POD','FAR','MR','ETS'].includes(metric)?1:Math.max(1,...values);
-  const shade=v=>{const t=Math.max(0,Math.min(1,(v-lo)/(hi-lo)));return `rgb(${Math.round(235-214*t)},${Math.round(247-119*t)},${Math.round(246-101*t)})`;};
-  let svg=svgStart($('chart-title').textContent,w,h).replace('<svg ',`<svg style="min-width:${w}px" `);
-  svg+=`<text x="18" y="29">阈值 ≥ mm</text>`;
-  leads.forEach((lead,j)=>svg+=`<text x="${left+(j+.5)*cw}" y="29" text-anchor="middle">+${lead}h</text>`);
-  thresholds.forEach((threshold,i)=>{
-    svg+=`<text x="92" y="${top+(i+.5)*ch+4}" text-anchor="end">≥ ${threshold}</text>`;
-    leads.forEach((lead,j)=>{
-      const r=data.find(x=>x.lead===lead&&x.threshold===threshold),v=r?.[metric],defined=Number.isFinite(v),t=defined?(v-lo)/(hi-lo):0;
-      svg+=`<g class="point"><title>${esc(displayModel($('single').value))} · +${lead}h · ≥${threshold} mm\n${metric}: ${fmt(v)}\n${r?'有效时次 '+r.cycles+' · H '+r.H+' / M '+r.M+' / F '+r.F:'没有参与当前筛选的资料'}${r&&!defined?'；分母为零，评分无定义':''}</title><rect x="${left+j*cw+2}" y="${top+i*ch+2}" width="${cw-4}" height="${ch-4}" rx="4" fill="${defined?shade(v):'#edf1f4'}"/><text x="${left+(j+.5)*cw}" y="${top+(i+.5)*ch+4}" text-anchor="middle" style="fill:${t>.6?'#fff':'#284b58'}">${fmt(v,2)}</text></g>`;
-    });
-  });
-  const bottom=top+thresholds.length*ch+24;
-  for(let k=0;k<60;k++)svg+=`<rect x="${left+k*4}" y="${bottom}" width="4" height="10" fill="${shade(lo+(hi-lo)*k/59)}"/>`;
-  svg+=`<text x="${left}" y="${bottom+28}">${fmt(lo,2)}</text><text x="${left+240}" y="${bottom+28}" text-anchor="end">${fmt(hi,2)}</text><text x="${left+270}" y="${bottom+10}">颜色越深，数值越大；优劣请按指标解释判断。灰色 — 为无资料或评分无定义。</text>`;
+function performancePanel(data,threshold){
+  const W=560,H=420,L=64,T=28,size=300,B=T+size,R=L+size;
+  const x=v=>L+v*size,y=v=>B-v*size;
+  const values=data.filter(r=>finite(r.POD)&&finite(r.SR));
+  let svg=svgStart(`≥${threshold} mm 评分综合图`,W,H);
+  for(let i=0;i<=10;i++){
+    const v=i/10;
+    svg+=`<path class="grid" d="M${x(v)} ${T}V${B}M${L} ${y(v)}H${R}"/>`;
+    if(i%2===0)svg+=`<text x="${x(v)}" y="${B+20}" text-anchor="middle">${v.toFixed(1)}</text><text x="${L-10}" y="${y(v)+4}" text-anchor="end">${v.toFixed(1)}</text>`;
+  }
+  for(const ts of [.1,.2,.3,.4,.5,.6,.7,.8,.9]){
+    const pts=[];
+    for(let i=1;i<=250;i++){const xx=i/250,yy=ts*xx/(xx*(1+ts)-ts);if(yy>=0&&yy<=1)pts.push(`${x(xx).toFixed(1)},${y(yy).toFixed(1)}`);}
+    if(pts.length)svg+=`<polyline points="${pts.join(' ')}" fill="none" stroke="#d9c39a" stroke-width="1"/>`;
+  }
+  for(const row of values){
+    const tip=`${displayModel(row.model)}\n成功率: ${fmt(row.SR)} · 命中率: ${fmt(row.POD)}\nTS: ${fmt(row.TS)} · BIAS: ${fmt(row.BIAS)}\n样本: ${row.n??'未记录'}`;
+    svg+=`<circle class="point" cx="${x(row.SR).toFixed(1)}" cy="${y(row.POD).toFixed(1)}" r="6" fill="${color(row.model)}" stroke="white" stroke-width="2"><title>${esc(tip)}</title></circle>`;
+  }
+  svg+=`<path class="axis" fill="none" d="M${L} ${T}V${B}H${R}"/><text x="${(L+R)/2}" y="${B+44}" text-anchor="middle">成功率（1 − 空报率）→</text><text transform="translate(${L-42} ${(T+B)/2}) rotate(-90)" text-anchor="middle">命中率 →</text><text x="${R+12}" y="${T+16}" style="font-size:12px;fill:#8b7355">金色曲线为 TS 等值线</text><text x="${R+12}" y="${T+38}" style="font-size:12px;fill:#6c7f8c">右上方更好 · ${values.length} 个模式</text>`;
   return svg+'</svg>';
 }
-function info(){return `<div class="info-grid"><div class="info-block"><h3>参考资料与空间范围</h3><p>${esc(ds.reference)}</p><p>${esc(ds.region)}</p><p>${kind==='环流'?`${ds.level} hPa · ${elementName()}；${circulationField==='wind'?'风矢量误差单位 m/s。':'高度误差单位 m，空间相关无量纲。'}`:stationDataset()?'站点实况；n为该时效/时刻配对站点数；未作海拔订正。':'格点分析场；配对格点数不等于独立站点数。'}</p><p>${ds.reference.includes('ERA5')?'此处使用 ERA5 再分析；近期 ERA5T 为初步资料，通常延迟约5天。':'此处评分参考：'+esc(ds.reference)+'。'}</p></div><div class="info-block"><h3>时间与样本口径</h3><p>起报时间 + 预报时效 = 预报对应时间（气象上称有效时间）；全部显示北京时间。</p><p>${kind==='降水'?`降水是有效时间之前 ${ds.accumulation} 小时的累计量，按 ≥ 阈值分别评分。`:'整段时间汇总：各时刻同等权重，ME、MAE取平均，RMSE和风矢量RMSE先平均平方再开方；CC显示各时刻空间相关的平均值。单个时刻和时间序列显示原始评分。'}</p><p>时效分组：临近0–24小时，短期超过24到72小时，中期超过72到168小时。24小时和72小时各只计入一组。分组汇总将每个“预报时效＋有效时间”作为一份预报；连续量各份预报等权，降水先合并命中、漏报、空报计数再评分。起报0小时仅在已有可配对资料时参与。</p><p>模式对比逐时效、逐阈值匹配共同时间；分组只汇总筛选后留下的组合。时间序列默认保留各模式已有时次。</p><p>${esc(displayText(ds.source_note||'共同有效时间不等于已验证完全相同的格点。'))}</p></div><div class="info-block"><h3>指标与无定义值</h3>${kind==='降水'?'<p>TS = H/(H+M+F)；POD = H/(H+M)；FAR = F/(H+F)。</p><p>MR = M/(H+M)；BIAS = (H+F)/(H+M)。</p><p>先累加 H/M/F 再计算评分；不平均逐次 TS。</p><p>分母为零显示 —，仍视为已归档记录。缺少总样本 N 时不提供 ETS。</p>':(kind==='环流'&&circulationField==='wind'||kind==='地面'&&ds.element.startsWith('wind'))?'<p>VRMSE = √mean[(u预报−u分析)² + (v预报−v分析)²]。</p><p>合并东西、南北风分量误差，单位 m/s，越接近 0 越好。</p><p>期间汇总先平均各时刻 VRMSE 的平方，再开方；无资料不计零分。</p>':`<p>ME、MAE、RMSE 分别为平均误差、平均绝对误差、均方根误差。</p><p>CC 表示空间相关；期间汇总显示平均空间相关，并非合并全部${stationDataset()?'站点配对':'格点'}后计算的相关系数。</p><p>无资料不计零分；某指标在参与时刻中存在无定义值时，汇总值显示 —。</p>`}</div><div class="info-block"><h3>资料来源和限制</h3><p>${stationDataset()?'站点资料由每3小时定时任务离线评分，保留近31天。':'检验归档缓存每 5 分钟更新。'}</p><p>${stationDataset()?'本资料集有 '+ds.row_count+' 条离线评分记录。':'读取 '+catalog.status.accepted+' 份；未识别 '+catalog.status.unverified+' 份；失败 '+catalog.status.unreadable+' 份。'}</p><p>${stationDataset()?'观测来源：OGIMET SYNOP / NOAA GHCNh / IEM METAR。各模式配对站点可能不同；CC在每个时刻按站点空间分布计算，少于3站或零方差时无定义。':'归档不足以支持年度报告、台站空间评分或降水过程诊断，当前仅展示可计算的结果。'}</p><p>展开“样本明细”查看筛选排除原因。</p></div></div>`;}
-function renderTable(rows){const metrics=metricsForView();tableColumns=[['model','模式'],...(['time','info'].includes(view)?[['valid','有效时间 BJT']]:[]),...(groupSummary()?[['lead_group_label','时效分组'],['lead_hours','参与时效 h'],['forecast_count','时效 / 时刻组合']]:[['lead','时效 h']]),...(kind==='降水'?[['threshold','阈值 ≥ mm']]:[]),...metrics.map(m=>[m,metricColumn(m)]),['cycles','有效时次'],['n','配对样本 N'],...(kind==='降水'?[['H','命中 H'],['M','漏报 M'],['F','空报 F']]:[])];
-  tableRows=rows.map(r=>({...r,element:elementName(),reference:ds.reference,accumulation:ds.accumulation,level:ds.level,height_m:ds.height_m,region:ds.region,period_start:$('start').value,period_end:$('end').value,run_hour:$('hour').value, score_scope:periodSummary()?'整段时间汇总':instantSelection()?'单个时刻':kind==='降水'?'期间累计计数':'逐时刻评分',lead_selection:groupActive()?'分组检验':manyLeads()?'逐时效检验':'单个时效',lead_group_bounds:groupActive()?(selectedGroup().includeMin?'0≤时效≤24':selectedGroup().min+'<时效≤'+selectedGroup().max):'',aggregation_rule:kind==='降水'?'累计H/M/F后评分':groupSummary()?'各时效/时刻组合等权；RMSE先平均平方再开方；CC为平均空间相关':periodSummary()?'各时刻等权；RMSE先平均平方再开方；CC为平均空间相关':'单次原始评分',fixed_valid:instantSelection()?$('valid').value:'', valid_times:r.valid_times||r.valid, sample_rule:useCommon()?(commonOptions().acrossLeads?'模式和所有时效共同有效时间（逐阈值）':'逐时效、逐阈值共同有效时间'):'各自有效时次'}));
-  const metric=$('metric').value;$('results-table').innerHTML='<thead><tr>'+tableColumns.map(c=>`<th scope="col">${esc(c[1])}</th>`).join('')+'</tr></thead><tbody>'+tableRows.slice(0,600).map(r=>'<tr>'+tableColumns.map(([key])=>`<td${key===metric?' class="metric-cell"':''}>${metrics.includes(key)?fmt(r[key]):key==='valid'?esc(full(r[key])):r[key]==null?'—':typeof r[key]==='number'?fmt(r[key],key==='threshold'?1:0):esc(key==='model'?label(r[key]):key==='lead_hours'?r[key].split(';').join('、'):r[key])}</td>`).join('')+'</tr>').join('')+'</tbody>';
-  $('table-note').textContent=`${rows.length} 行 · — 为缺测或无定义${rows.length>600?'；显示前600行，CSV导出全部':''}`;$('export-csv').disabled=!rows.length;
+function performanceChart(data){
+  if(!data.length)return empty('当前条件下没有可比较的样本');
+  const thresholds=unique(data.map(r=>r.threshold)).sort((a,b)=>a-b);
+  return `<div class="performance-grid">${thresholds.map(threshold=>{
+    const rows=data.filter(r=>r.threshold===threshold);
+    return `<section class="performance-panel"><h3>${esc('≥'+threshold+' mm')}</h3>${rows.length?performancePanel(rows,threshold):empty('该阈值暂无有效样本')}</section>`;
+  }).join('')}</div>`;
 }
 
-function wn3CoverageNote(availableRows){
-  let note=$('wn3-source-note');
-  if(!note){note=document.createElement('p');note.id='wn3-source-note';note.className='filter-note current-source';$('filter-note').after(note);}
-  note.hidden=['地面','环流'].includes(kind)||!(ds.supported_models||ds.models).includes(WN3);
-  if(note.hidden)return;
-  const rows=availableRows.filter(r=>r.model===WN3),count=new Set(rows.map(r=>JSON.stringify([r.lead,r.valid]))).size;
-  const provenance=displayText(ds.model_sources?.[WN3]?.note||'WN3 使用本机缓存的 0.1° 集合平均；仅接入标准 2 米气温和完整小时段组成的 3 小时降水。');
-  note.textContent=provenance+' '+(count?`当前日期、起报和时效有 ${count} 组评分；共同样本按有效时间取交集。`:'当前日期、起报和时效没有 WN3 评分；缺资料不计为零分。');
+/* ---------- table / CSV ---------- */
+function buildTable(data,xKey,xs){
+  const m=metricKey,models=numericFirst(activeModels().filter(model=>data.some(r=>r.model===model)));
+  if(!models.length||!xs.length){tableState={rows:[],columns:[],xKey,xs:[]};return;}
+  const modelRows=models.map(model=>({model,cells:xs.map(xv=>data.find(r=>r.model===model&&r[xKey]===xv))}));
+  const best=xs.map((_,i)=>bestSet(modelRows.map(row=>row.cells[i]?.[m]),m));
+  tableState={rows:modelRows,cells:modelRows,columns:[],xKey,xs,best,metric:m,models};
+}
+function renderMetricTable(data,xKey,xs){
+  buildTable(data,xKey,xs);
+  const m=metricKey,models=tableState.models||[];
+  if(!models.length){$('results-table').innerHTML='';$('table-note').textContent='当前条件暂无有效样本';$('export-csv').disabled=true;return;}
+  const head=`<thead><tr><th scope="col">模式</th>${xs.map(x=>`<th scope="col">${esc(xKey==='valid'?short(x):xKey==='threshold'?'≥'+x+' mm':'+'+x+'h')}${xKey==='lead'&&$('hour').value!=='all'?`<small>${esc(validHourText(x))}</small>`:''}</th>`).join('')}</tr></thead>`;
+  const body=`<tbody>${tableState.rows.map((row,ri)=>`<tr><th scope="row">${esc(displayModel(row.model))}</th>${row.cells.map((cell,i)=>{
+    const v=cell?.[m],shown=shownValue(v),bold=shown!==null&&tableState.best[i]?.size>0&&tableState.best[i].has(shown);
+    const text=metricCellText(v,m),title=cell?`样本 n=${cell.n??'未记录'} · 有效时次 ${cell.cycles??1}`:'无有效样本';
+    return `<td${bold?' class="is-best"':''} title="${esc(title)}">${bold?`<strong>${text}</strong>`:text}</td>`;
+  }).join('')}</tr>`).join('')}</tbody>`;
+  $('results-table').innerHTML=`<caption class="table-caption">${esc(metricTitle(metricKey))}${unit()?' ('+esc(unit())+')':''}</caption>`+head+body;
+  $('table-title').textContent=xKey==='valid'?'模式 × 日期':xKey==='threshold'?`模式 × 阈值 · +${stateLead}h`:'模式 × 时效';
+  $('table-note').textContent=`${xs.length} 个${xKey==='threshold'?'阈值':'时效'} · ${models.length} 个模式 · 粗体为每列最好（按显示精度，含并列）· — 为缺测 · 悬停查看样本数`;
+  $('export-csv').disabled=false;
+}
+function renderPerformanceTable(data){
+  const m='TS',thresholds=unique(data.map(r=>r.threshold)).sort((a,b)=>a-b),models=numericFirst(activeModels().filter(model=>data.some(r=>r.model===model)));
+  if(!models.length||!thresholds.length){$('results-table').innerHTML='';$('table-note').textContent='当前条件暂无有效样本';$('export-csv').disabled=true;tableState={rows:[],columns:[],xKey:'threshold',xs:[]};return;}
+  const rows=models.map(model=>({model,cells:thresholds.map(t=>data.find(r=>r.model===model&&r.threshold===t))}));
+  const best=thresholds.map((_,i)=>bestSet(rows.map(row=>row.cells[i]?.TS),'TS'));
+  tableState={rows,cells:rows,columns:[],xKey:'threshold',xs:thresholds,best,metric:'TS',models};
+  $('results-table').innerHTML=`<thead><tr><th scope="col">模式</th>${thresholds.map(t=>`<th scope="col">≥${t} mm</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr><th scope="row">${esc(displayModel(row.model))}</th>${row.cells.map((cell,i)=>{const v=cell?.TS,shown=shownValue(v),bold=shown!==null&&best[i].size>0&&best[i].has(shown),text=metricCellText(v,'TS');return `<td${bold?' class="is-best"':''} title="${esc(cell?`样本 n=${cell.n??'未记录'}`:'无有效样本')}">${bold?`<strong>${text}</strong>`:text}</td>`;}).join('')}</tr>`).join('')}</tbody>`;
+  $('table-title').textContent='模式 × 阈值';
+  $('table-note').textContent='TS 越大越好；粗体为每个阈值的最好模式（按显示精度，含并列）· — 为缺测 · 悬停查看样本数';
+  $('export-csv').disabled=false;
+}
+function exportCsv(){
+  const {rows,xs,xKey}=tableState;
+  if(!rows?.length)return;
+  const m=tableState.metric||metricKey,columns=[['model','模式'],[xKey,xKey==='lead'?'时效 h':xKey==='valid'?'有效时间 BJT':'阈值 mm'],[m,m],['n','配对样本 N'],['cycles','有效时次']];
+  if(kind==='降水'&&m!=='TS')columns.push(['H','命中 H'],['M','漏报 M'],['F','空报 F']);
+  const data=rows.flatMap(row=>row.cells.map((cell,i)=>({model:displayModel(row.model),[xKey]:xs[i],[m]:C.percentMetrics.includes(m)&&finite(cell?.[m])?cell[m]*100:cell?.[m],n:cell?.n,cycles:cell?.cycles,H:cell?.H,M:cell?.M,F:cell?.F,POD:cell?.POD,FAR:cell?.FAR,BIAS:cell?.BIAS,SR:cell?.SR,is_demo:cell?.is_demo,source_model:cell?.source_model,target_product_id:cell?.target_product_id,excluded_from_official_scores:cell?.excluded_from_official_scores})));
+  if(metricKey==='performance')columns.push(['POD','命中率 POD'],['FAR','空报率 FAR'],['BIAS','频率偏差 BIAS'],['SR','成功率']);
+  if(data.some(r=>r.is_demo))columns.push(['is_demo','WN3演示'],['source_model','真实来源'],['target_product_id','演示目标接口'],['excluded_from_official_scores','排除正式排名']);
+  download(new Blob([C.csv(data,columns)],{type:'text/csv;charset=utf-8'}),`${activeModels().some(m=>window.DemoModels.profile(m))?'WN3演示_':''}检验_${exportElement()}_${m}_${$('end').value}.csv`);
+}
+function empty(title='当前条件下没有可比较的样本',detail='请调整日期、起报时次或模式。'){return `<div class="empty"><strong>${esc(title)}</strong><span>${esc(detail)}</span></div>`;}
+function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);}
+
+/* ---------- info page ---------- */
+function infoPage(){
+  const g=currentGroup(),defs=groupMetricDefs(g);
+  const metricRows=defs.map(m=>`<p><b>${esc(m.label)}</b>：${esc(metricHelp[m.key]||'')}</p>`).join('');
+  const sample=ds?scopedRows(activeModels()).filter(row=>finite(row.n)):[];
+  const n=sample.reduce((sum,row)=>sum+row.n,0);
+  const scope=stationDataset()?`站点实况 · ${stationScopeLabel()}`:`格点分析场 · ${ds?.region||''}`;
+  return `<div class="info-grid detail-info">
+    <div class="info-block"><h3>资料与范围</h3><p>${esc(scope)}</p><p>${esc(ds?.reference||'')}${ds?.accumulation?` · ${ds.accumulation}小时累计降水`:''}${kind==='环流'?` · ${ds?.level} hPa` :''}</p><p>日期按有效时间（北京时间）筛选；起报时次 ${esc(hourLabel())}。${stationDataset()?'站点资料由定时任务离线评分，保留近16天。':'检验归档缓存定时更新。'}</p></div>
+    <div class="info-block"><h3>时间与样本口径</h3><p>起报时间 + 预报时效 = 有效时间；全部显示北京时间。${chartMode==='date'?'“随日期”固定一个预报时效，比较各有效时刻。':'“随预报时效”按每个时效汇总所选日期和起报时次。'}</p><p>默认只保留各模式共同有效的时次（逐时效取交集），分类评分先累加命中、漏报、空报计数再计算。各模式按自身有效配对评分。</p><p>当前图表样本合计 n=${n.toLocaleString('zh-CN')}；缺资料不计零分。</p></div>
+    <div class="info-block"><h3>指标口径</h3>${metricRows}<p>分级检验（按小雨/中雨等量级）暂不在详细分析中提供，可在考核总览查看分级 TS；降水详细分析使用累计阈值。</p></div>
+    <div class="info-block"><h3>已收起的控件</h3><p>“仅共同有效时次”固定为开启，“各时效使用同一组有效时间”固定为关闭，“检验方式”固定为累加（≥阈值）。这些默认值与改版前一致，不再单独显示。</p><p>${esc(displayText(ds?.source_note||'共同有效时间不等于已验证完全相同的格点；各模式保留原始评分。'))}</p></div>
+  </div>`;
 }
 
-function periodCoverage(rows){
-  const box=$('period-summary');box.hidden=!periodSummary();if(box.hidden)return;
-  const start=$('start').value,end=$('end').value;
-  if(!start||!end){box.textContent='请选择完整的开始和结束日期。';return;}
-  if(start>end){box.textContent='开始日期晚于结束日期，请重新选择。';return;}
-  const total=Math.round((Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/86400000)+1;
-  const times=unique(rows.map(r=>r.valid)).sort(),days=unique(times.map(t=>t.slice(0,10))),missing=Math.max(0,total-days.length);
-  box.textContent=`统计范围：${start} 至 ${end}（${total}天）。实际参与 ${times.length} 个时刻，覆盖 ${days.length} 天${missing?'；'+missing+'天暂无可用评分':''}。`+(times.length?`参与资料：${full(times[0])} 至 ${full(times.at(-1))}，北京时间。`:'')+'仅汇总已有评分，缺资料不计零分。';
+/* ---------- render ---------- */
+function setChartTitle(title){
+  if(activeModels().some(m=>window.DemoModels.profile(m)))title='含 WN3 演示资料 · '+title;
+  if(stationScoreActive())title=stationScopeLabel()+' · '+title;
+  $('chart-title').textContent=title;
 }
-
-function leadControls(){
-  for(const b of document.querySelectorAll('[data-lead-mode]')){
-    b.setAttribute('aria-pressed',b.dataset.leadMode===leadMode);
-    if(b.dataset.leadMode==='single')b.textContent=manyLeads()?'全部时效':'单个时效';
-  }
-  $('lead-single-controls').hidden=groupActive()||manyLeads();
-  $('lead-group-switch').hidden=!groupActive();$('lead-group-help').hidden=!groupActive();
-  $('lead-group-help').textContent='按起报后经过的小时数分组。24小时计入临近预报，72小时计入短期预报。'+(kind==='降水'?`组内各时效均检验${ds.accumulation}小时累计降水。`:'每个时效只归入一组。');
-  const raw=baseRows(ds.models);
-  $('lead-group-switch').replaceChildren(...C.leadGroups.map(g=>{
-    const b=document.createElement('button');b.type='button';b.dataset.leadGroup=g.id;
-    b.textContent=g.label+(C.filterLeadGroup(raw,g.id).length?'':' · 暂无评分');
-    b.setAttribute('aria-pressed',g.id===leadGroup);
-    b.onclick=()=>{leadGroup=g.id;scoreScope='period';fitGroupModels();render();};return b;
-  }));
-  const select=$('lead'),items=[...select.options],dense=items.length>12;
-  select.hidden=!dense;
-  const shortcuts=dense?items.filter(o=>[0,6,12,24,48,72,120,168,Number(select.value)].includes(Number(o.value))):items;
-  $('lead-switch').replaceChildren(...shortcuts.map(o=>{
-    const b=document.createElement('button');b.type='button';b.textContent=o.textContent;
-    b.dataset.value=o.value;b.setAttribute('aria-pressed',o.value===select.value);
-    b.onclick=()=>{select.value=o.value;render();};return b;
-  }));
-}
-function leadGroupCoverage(){
-  const box=$('lead-group-summary');box.replaceChildren();box.hidden=true;
-  if(!groupActive())return;
-  if(fitNote){const note=document.createElement('span');note.id='lead-fit-note';note.textContent=fitNote;box.append(note);box.hidden=false;}
-  let eligible=leadRows(baseRows(ds.models));if(instantSelection())eligible=eligible.filter(r=>r.valid===$('valid').value);
-  const availableModels=unique(eligible.map(r=>r.model));
-  if(!singleMode()&&availableModels.length&&activeModels().some(m=>!availableModels.includes(m))){
-    const button=document.createElement('button');button.type='button';button.className='quiet';button.id='lead-models-available';
-    button.textContent='只比较本组有资料的模式';
-    button.onclick=()=>{selected=new Set(availableModels);render();};box.append(button);box.hidden=false;
-  }
-}
-
-function render(){
-  if(!ds)return;
+function render(opts={}){
+  if(!ds||rowsReadyId!==ds.id)return;
   clampStationDates();
-  let availableRows=baseRows(ds.models);
-  availableRows=leadRows(availableRows);
-  modelControls(availableRows);
-  wn3CoverageNote(availableRows);
-  window.DemoModels.gridNotice(kind,activeModels());
-  $('analysis-source-note').hidden=!['环流','地面'].includes(kind);
-  $('analysis-source-note').textContent=ds.source_note||'参考：'+ds.reference+'。';
-  validOptions();
-  const rain=kind==='降水',allThresholds=rain&&['multi','single','matrix'].includes(view);
-  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===view));
-  $('single-label').hidden=!singleMode();$('time-mode-label').hidden=view!=='time';
-  $('threshold-label').hidden=!rain||allThresholds;$('lead-label').hidden=view==='info';leadControls();
-  $('score-scope-field').hidden=rain||['time','info'].includes(view);
-  for(const b of document.querySelectorAll('[data-score-scope]'))b.setAttribute('aria-pressed',b.dataset.scoreScope===scoreScope);
-  $('valid-label').hidden=!instantSelection();
-  const ccOption=[...$('metric').options].find(o=>o.value==='CC');if(ccOption)ccOption.textContent=metricLabel('CC');
-  $('metric-label').hidden=['performance','info'].includes(view);
-  $('common-label').hidden=view==='time';$('time-sample-controls').hidden=view!=='time';
-  $('across-label').hidden=!(manyLeads()||groupActive());$('across-leads').disabled=!useCommon();
-  for(const b of document.querySelectorAll('[data-time-sample]'))b.setAttribute('aria-pressed',(b.dataset.timeSample==='common')===timeCommon);
-  $('scope-hint').textContent=groupActive()?(manyLeads()?'展示所选组内各时效':'汇总所选组内时效'):allThresholds?'当前视图展示全部降水阈值':manyLeads()?'当前视图展示全部已归档时效':'';
-  $('export-svg').hidden=view==='info';
-  const metric=$('metric').value,lead=Number($('lead').value),threshold=Number($('threshold').value),source=scopeRows(rain||Boolean($('valid').value)),raw=currentRows();
-  stats(raw);sampleSummary(source,raw);periodCoverage(raw);leadGroupCoverage();
-  if(view==='time'){
-    const available=unique(source.map(r=>r.valid)).length,retained=unique(raw.map(r=>r.valid)).length;
-    $('time-sample-note').textContent=useCommon()&&retained<available?`共同时次保留 ${retained} / ${available} 个` : '';
+  if(stationDataset()&&stationRowsRange&&$('start').value&&$('end').value&&$('start').value<=$('end').value){
+    const wantedStation=scoreStation?.id||'',wantedRegion=scoreStation?'all':(stationRegion||'all');
+    if(stationRowsRange.start!==$('start').value||stationRowsRange.end!==$('end').value||(stationRowsRange.station||'')!==wantedStation||(stationRowsRange.region||'all')!==wantedRegion){
+      remember();setDataset();return;
+    }
   }
-  const age=(Date.now()-Date.parse(ds.end+'+08:00'))/3600000;
-  $('data-notice').hidden=age<=24;$('data-notice').textContent=`${ds.reference.includes('ERA5')?'ERA5参考资料截至':'资料截至'} ${full(ds.end)} BJT${ds.reference.includes('ERA5')?' · 再分析资料存在发布延迟':''}`;
-  choiceControls('metric-switch','metric',true);choiceControls('threshold-switch','threshold');choiceControls('hour-switch','hour');validChoiceControls();
-  const missing=(ds.supported_models||ds.models).filter(m=>!ds.models.includes(m));
-  $('model-status').textContent=missing.length?missing.map(displayModel).join('、')+' 暂无'+labelFor(ds)+'评分。':'';
-  const statusRow=$('model-status-row');if(statusRow)statusRow.hidden=!missing.length;
-  $('active-filter-summary').textContent=($('hour').value==='all'?'全部起报时次':$('hour').value+'时起报')+' · '+(useCommon()?(commonOptions().acrossLeads?'跨时效共同时间':'共同有效时次'):view==='time'?'全部已有时次':'各自有效时次');
-  $('filter-note').textContent=`${stationDataset()?'站点实况 · ':''}${labelFor(ds)} · ${$('start').value} — ${$('end').value} BJT · ${ds.region}`;
-  $('chart-subtitle').textContent=`${stationDataset()?'站点实况 · ':''}${ds.region} · ${labelFor(ds)} · ${$('start').value} — ${$('end').value} · ${useCommon()?(commonOptions().acrossLeads?'模式与时效共同时间':'逐时效共同时间'):view==='time'?'各模式已有时次':'各自可用时间'}${instantSelection()?' · 仅看 '+full($('valid').value)+' 北京时间':periodSummary()?' · 整段时间汇总':''}`;
-  let data=[],chart='',title='';
-  if(['multi','single'].includes(view)){
-    title=(view==='single'?displayModel($('single').value)+' · 单模式检验':'多模式'+(rain?'降水阈值':'评分')+'对比')+' · '+leadCaption();
-    data=resultGroups(raw,rain?['model','lead','threshold']:['model','lead']);setChartTitle(title);
-    chart=bars(data,rain?'threshold':'model',rain?`${ds.accumulation}小时累计降水阈值 ≥（mm）`:'模式');
-  }else if(view==='matrix'){
-    title=`${displayModel($('single').value)||'单模式'} · 时效 × 阈值 · ${metric}`;
-    data=resultGroups(raw,['model','lead','threshold']);setChartTitle(title);chart=matrix(data);
-  }else if(view==='lead'){
-    title=`预报时效对比${rain?' · ≥ '+threshold+' mm':''}`;data=resultGroups(raw,['model','lead',...(rain?['threshold']:[])]);setChartTitle(title);chart=lines(data,'lead','预报时效（小时）');
-  }else if(view==='time'){
-    title=(timeLeads()?`${displayModel($('single').value)||'单模式'} · 多时效时间序列`:`多模式时间序列 · ${leadCaption()}`)+(rain?' · ≥ '+threshold+' mm':'');
-    data=resultGroups(raw,['model','lead','valid',...(rain?['threshold']:[])]);setChartTitle(title);
-    chart=lines(timeLeads()?data.map(r=>({...r,model:'+'+r.lead+'h'})):data,'valid','有效时间（北京时间）');
-  }else if(view==='performance'){
-    title=`评分综合图 · ${leadCaption()} · ≥ ${threshold} mm`;data=resultGroups(raw,['model','lead','threshold']);setChartTitle(title);chart=performance(data);
+  regionControls();
+  const g=currentGroup();
+  if(page!=='metric'&&page!=='map'&&page!=='info')page='metric';
+  if(page==='metric'&&!groupMetricDefs(g).some(d=>d.key===metricKey))metricKey=groupMetricDefs(g)[0]?.key||'TS';
+  const defs=groupMetricDefs(g);
+  options($('metric'),defs.map(d=>[d.key,d.label]),metricKey);$('metric').value=metricKey;
+  if(needsThreshold()&&!(ds.thresholds||[]).includes(Number($('threshold').value)))$('threshold').value=String(ds.thresholds?.[0]??.1);
+  const isPerformance=metricKey==='performance';
+  if(isPerformance&&chartMode!=='lead')chartMode='lead';
+  if(chartMode==='threshold'&&!needsThreshold())chartMode='lead';
+  const available=availableRowsForModels();
+  if(automaticModels&&!stationScoreActive()){
+    const roster=new Set(available.map(r=>r.model));
+    selected=new Set(defaultModels(ds,roster));
+  }
+  modelControls(available);
+  renderFilter();
+  $('chart-mode-toggle').hidden=isPerformance;
+  $('date-lead-label').hidden=!(page==='metric'&&chartMode!=='lead'&&!isPerformance);
+  $('grid-workspace').dataset.activeKind=groupId;
+  renderNav();
+  $('page-title').textContent=page==='info'?'说明':page==='map'?`${g.label} · 站点分布`:`${g.label} · ${metricTitle(metricKey)}`;
+  $('page-subtitle').textContent=page==='info'?'资料、时间口径与指标定义':page==='map'?'站点分布图与单站预报实况':`${scopeLabel()} · ${$('start').value} — ${$('end').value} · ${hourLabel()}`;
+  $('load-error').hidden=true;
+  if(page==='map')return renderMapPage();
+  if(page==='info')return renderInfoPage();
+  $('detail-results').hidden=false;$('detail-table-card').hidden=false;$('grid-station-view').hidden=true;
+  $('chart-mode-toggle').hidden=isPerformance;$('export-svg').hidden=false;$('legend').hidden=false;$('chart-explainer').hidden=false;
+  $('chart-mode-toggle').querySelectorAll('[data-chart-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.chartMode===chartMode)));
+  $('chart-mode-toggle').querySelector('[data-chart-mode="threshold"]').hidden=!needsThreshold();
+  const models=activeModels();
+  $('legend').innerHTML=numericFirst(models).map(m=>`<span><i style="background:${color(m)}"></i>${esc(label(m))}</span>`).join('');
+  if(!models.length){showEmpty(available.length?'请选择至少一个模式':'当前条件没有可比较的样本',available.length?'可点击“默认模式”恢复选择。':'请调整日期、起报时次或指标。');return;}
+  if(!$('start').value||!$('end').value||$('start').value>$('end').value){showEmpty('请选择有效日期范围','开始日期不能晚于结束日期。');return;}
+  let data,xKey,xs,title,subtitle;
+  if(isPerformance){
+    const result=chartRows();data=result.data;
+    setChartTitle(`评分综合图 · ${scopeLabel()}`);
+    const span=`${$('start').value} — ${$('end').value}`,issue=issueRange(result.raw);
+    $('chart-subtitle').textContent=['各阈值',issue&&issue!==span?`起报 ${issue}`:'',`检验 ${span} BJT`,hourLabel(),result.raw.length?'有效样本 '+result.raw.length+' 条':'暂无有效样本'].filter(Boolean).join(' · ');
+    $('chart').innerHTML=performanceChart(data);renderPerformanceTable(data);
+    $('chart-explainer').textContent='每个阈值一张小图：右上方命中率和成功率更高；金色曲线为 TS 等值线。悬停查看数值。';
   }else{
-    title='资料覆盖与检验口径';data=resultGroups(raw,['model','lead','valid',...(rain?['threshold']:[])]);setChartTitle(title);chart=info();
+    const result=chartRows();data=result.data;xKey=result.xKey;
+    const present=unique(data.map(r=>r[xKey])),nice=xKey==='lead'?displayLeads(ds).filter(l=>present.includes(l)):[];
+    xs=xKey==='threshold'?present.filter(Number.isFinite).sort((a,b)=>a-b):(nice.length?nice:sampleX(present)).filter(v=>v!==undefined&&v!==null);
+    const metricLabel=metricTitle(metricKey);
+    title=chartMode==='date'?`${metricLabel} · 随日期 · 固定 +${stateLead}h`:chartMode==='threshold'?`${metricLabel} · 按阈值 · 固定 +${stateLead}h`:`${metricLabel} 随预报时效`;
+    setChartTitle(title);
+    const thresholdText=kind==='降水'?(metricKey==='PC'?'≥0.1 mm':needsThreshold()&&chartMode!=='threshold'?`≥${thresholdValue()} mm`:'各阈值'):'';
+    const span=`${$('start').value} — ${$('end').value}`,issue=issueRange(result.raw);
+    subtitle=[thresholdText,scopeLabel(),stationDataset()?'站点实况':'格点分析场',issue&&issue!==span?`起报 ${issue}`:'',`检验 ${span}`,hourLabel()].filter(Boolean).join(' · ');
+    $('chart-subtitle').textContent=subtitle;
+    if(!data.length){showEmpty('当前条件没有可比较的样本','请调整日期、起报时次或阈值。');return;}
+    $('chart').innerHTML=xKey==='threshold'?thresholdBarSvg(data,xs):lineChartSvg(data,xKey,xs,chartMode==='lead'&&$('hour').value!=='all');
+    renderMetricTable(data,xKey,xs);
+    const explanation=metricKey==='CC'&&stationScoreActive()?'单站预报与实况随时间的相关系数，越接近 1 越好；至少需要 3 份配对。':(metricHelp[metricKey]||'');
+    $('chart-explainer').textContent=`${explanation}${unit()?' 单位：'+unit()+'。':''}点击或悬停查看每个模式的数值和样本数。${commonFallback?' 所选模式没有共同有效时次，已按各模式各自有效时次显示。':''}`;
   }
-  const modelList=timeLeads()?unique(data.map(r=>r.lead)).sort((a,b)=>a-b).map(l=>'+'+l+'h'):numericFirst(activeModels());
-  $('legend').innerHTML=view==='info'?'':modelList.map(m=>`<span><i style="background:${color(m)}"></i>${esc(label(m))}</span>`).join('');
-  if(!raw.length&&view!=='info'&&activeModels().length){
-    const candidates=scopeRows(false),missing=activeModels().filter(m=>!candidates.some(r=>r.model===m));
-    if(!candidates.length)chart=empty('所选日期和时效没有评分归档','当前选择：'+$('start').value+'—'+$('end').value+'，'+leadCaption()+'。可调整日期、时效或模式；没有评分的时效不计零分。');
-    else if(useCommon()&&missing.length)chart=empty('所选模式缺少共同样本',missing.map(label).join('、')+' 在当前日期和时效没有评分。可取消这些模式、切换时效，或在“更多筛选”关闭“仅共同有效时次”。');
-    else if(useCommon())chart=empty('所选模式没有重合的有效时间','各模式有归档，但当前范围没有共同时间；请调整日期、模式或共同时间筛选。');
+  $('chart').querySelectorAll('svg').forEach(svg=>{svg.style.maxWidth='100%';});
+  chartValues();
+  $('export-svg').disabled=!$('chart').querySelector('svg');
+  $('updated').textContent='结果更新 '+full(ds.updated)+' BJT';
+  remember();writeHash();
+  if(!opts.skipStationEvent)document.dispatchEvent(new CustomEvent('gridselectionchange',{detail:stationSelection()}));
+}
+function showEmpty(title,detail){
+  $('chart').innerHTML=empty(title,detail);$('results-table').innerHTML='';$('table-note').textContent='';$('export-svg').disabled=true;$('export-csv').disabled=true;$('legend').innerHTML='';
+}
+function renderMapPage(){
+  $('detail-results').hidden=true;$('detail-table-card').hidden=true;
+  $('chart').innerHTML='';$('chart-title').textContent='';$('chart-subtitle').textContent='';
+  $('grid-station-view').hidden=false;
+  if(!stationKind(currentGroup())){
+    $('grid-station-view').innerHTML='<div class="notice">当前要素没有站点实况评分，站点分布不可用。</div>';return;
   }
-  if(!$('start').value||!$('end').value){data=[];chart=empty('请选择完整的日期范围','填写开始日期和结束日期后即可查看评分。');}
-  else if($('start').value>$('end').value){data=[];chart=empty('开始日期晚于结束日期','请重新选择有效日期范围。');}
-  if(!activeModels().length&&view!=='info')chart=empty('请选择至少一个模式','可点击“全选模式”或“默认模式”恢复选择。');
-  if(!ds.models.length&&['环流','地面'].includes(kind)&&view!=='info')chart=empty(labelFor(ds)+'暂无已配对评分',ds.availability_note||'当前参考资料没有可配对的本地预报。');
-  $('chart').classList.toggle('matrix-chart',view==='matrix');$('chart').innerHTML=chart;chartValues();
-  $('chart-explainer').textContent=view==='performance'?'综合图同时显示 POD、1−FAR、TS 和 BIAS；点击或悬停查看数值。':view==='info'?'样本不足与无事件不等于零分；不依据不完整资料自动排名。':`${metricHelp[metric]} ${unit()?'单位：'+unit()+'。':''} ${groupSummary()?(rain?'合并组内命中、漏报、空报计数后计算评分。':'每个“时效＋时刻”组合等权；RMSE先平均平方再开方，CC为平均空间相关。'):periodSummary()?'汇总所选日期内已有时刻；各时刻同等权重。'+(metric==='CC'?'此处为平均空间相关。':''):view==='time'?(useCommon()?'仅显示共同时次；缺测处断线。':'各模式保留已有时次；缺测处断线。')+'点击或悬停查看每次评分。':rain?'先汇总命中、漏报和空报计数，再评分；点击或悬停查看数值。':''}`;
-  $('export-svg').disabled=!$('chart').querySelector('svg');renderTable(data);
-  $('updated').textContent='结果更新 '+full(ds.updated)+' BJT';remember();
+  if(!stationDataset()){
+    $('grid-station-view').innerHTML='<div class="notice" role="status">读取站点实况资料…</div>';
+    setReference('station').then(ok=>{
+      if(page==='map'&&ok)render();
+      else if(page==='map')$('grid-station-view').innerHTML='<div class="notice">站点实况资料暂不可用，请刷新或换回格点分析场。</div>';
+    });
+    return;
+  }
+  $('grid-station-view').innerHTML='<div class="notice" role="status">读取站点分布与单站配对…</div>';
+  $('updated').textContent='结果更新 '+full(ds.updated)+' BJT';
+  remember();writeHash();
   document.dispatchEvent(new CustomEvent('gridselectionchange',{detail:stationSelection()}));
 }
-function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);}
-$('export-csv').onclick=()=>{const cols=[...tableColumns,['is_demo','是否演示'],['source_model','演示真实来源'],['target_product_id','演示目标接口'],['excluded_from_official_scores','排除正式排名'],['element','检验要素'],['source_label','资料溯源渠道'],['source_datasets','原始归档ID'],['reference','参考资料'],['region','检验区域'],['accumulation','累计小时'],['level','气压 hPa'],['height_m','离地高度 m'],['period_start','开始有效日期'],['period_end','结束有效日期'],['sample_rule','样本规则'],['run_hour','起报时次BJT'],['score_scope','查看方式'],['aggregation_rule','汇总方法'],['fixed_valid','预报对应时间BJT'],['valid_times','实际参与有效时间BJT'],['lead_selection','时效检验方式'],['lead_group_bounds','分组边界小时'],...(!groupSummary()?[['lead_hours','实际参与时效小时'],['forecast_count','时效时刻组合数']]:[])];download(new Blob([C.csv(tableRows.map(r=>({...r,model:label(r.model)})),cols)],{type:'text/csv;charset=utf-8'}),`${activeModels().some(m=>window.DemoModels.profile(m))?'WN3演示_':''}检验_${exportElement()}_${view}_${$('end').value}.csv`);};
-$('export-svg').onclick=()=>{const svg=$('chart').querySelector('svg');if(!svg)return;const copy=svg.cloneNode(true),style=document.createElementNS('http://www.w3.org/2000/svg','style');for(const point of copy.querySelectorAll('.point')){const d=point.querySelector('desc');if(d){const title=document.createElementNS('http://www.w3.org/2000/svg','title');title.textContent=d.textContent;d.replaceWith(title);}for(const name of ['role','tabindex','aria-pressed'])point.removeAttribute(name);point.classList.remove('is-selected');}style.textContent='text{font-family:"Microsoft YaHei",sans-serif;font-size:11px;fill:#718593}.grid{stroke:#edf2f5;stroke-width:1}.axis{stroke:#d5e1e9;stroke-width:1}';copy.prepend(style);download(new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml;charset=utf-8'}),`${activeModels().some(m=>window.DemoModels.profile(m))?'WN3演示_':''}检验_${exportElement()}_${view}.svg`);};
+function renderInfoPage(){
+  $('detail-results').hidden=false;$('detail-table-card').hidden=true;$('grid-station-view').hidden=true;
+  $('chart-mode-toggle').hidden=true;$('date-lead-label').hidden=true;$('export-svg').hidden=true;$('legend').hidden=true;$('chart-explainer').hidden=true;
+  $('chart-title').textContent='资料与口径';$('chart-subtitle').textContent='';
+  $('chart').innerHTML=infoPage();
+  $('export-csv').disabled=true;$('updated').textContent='结果更新 '+full(ds.updated)+' BJT';
+  remember();writeHash();
+}
 
-document.querySelectorAll('[data-kind]').forEach(b=>b.onclick=async()=>{if(await window.GridVerification.open())await changeKind(b.dataset.kind);});
-document.querySelectorAll('[data-circulation-field]').forEach(b=>b.onclick=()=>setCirculationField(b.dataset.circulationField));
-document.querySelectorAll('[data-days]').forEach(b=>b.onclick=()=>dates(b.dataset.days));
-document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});
-document.querySelectorAll('[data-time-sample]').forEach(b=>b.onclick=()=>{timeCommon=b.dataset.timeSample==='common';render();});
-document.querySelectorAll('[data-score-scope]').forEach(b=>b.onclick=()=>{scoreScope=b.dataset.scoreScope;render();});
-document.querySelectorAll('[data-lead-mode]').forEach(b=>b.onclick=()=>{
-  leadMode=b.dataset.leadMode;
-  if(leadMode==='group'){scoreScope='period';fitGroupModels();}
-  render();
-});
-$('dataset').onchange=setDataset;
-for(const id of ['metric','threshold','lead','hour','common','single','valid','time-mode','across-leads'])$(id).onchange=render;
-for(const id of ['start','end'])$(id).onchange=()=>{document.querySelectorAll('[data-days]').forEach(b=>b.classList.remove('chosen'));render();};
-$('models-all').onclick=()=>{selected=new Set(ds.models);modelControls();render();};
-$('models-default').onclick=()=>{selected=new Set(defaultModels(ds));modelControls();render();};
-async function load(){
-  if(ds)remember();
-  const previous=ds?.id||preferences.dataset,targetKind=ds?kind:preferences.kind||kind;
-  let success=false;$('refresh').disabled=true;$('load-error').hidden=true;$('catalog-status-wrap').hidden=false;$('catalog-status').textContent='读取资料…';
+/* ---------- station integration ---------- */
+function stationSelection(){
+  const models=activeModels();
+  return {station:stationDataset(),kind,element:ds?.element,model:models[0],modelLabel:label(models[0]),models:models.map(model=>({model,label:label(model),color:color(model)})),variable:ds?.var,
+    start:$('start').value,end:$('end').value,hour:$('hour').value,
+    leads:ds?ds.leads.slice():[],
+    scoreStation:stationDataset()?scoreStation:null,
+    updated:ds?.updated,verificationMode:'cumulative',grade:null,
+    metric:metricKey==='performance'?'TS':metricKey,threshold:kind==='降水'?thresholdValue():null,lead:stateLead,reference:gridReference,page,region:stationRegion};
+}
+async function setStationScope(region,site=null){
+  const next=['all','hn','hun','gba','hk','sz','xj'].includes(region)?region:'all';
+  if(!stationDataset()||!ds)return;
+  if(next===stationRegion&&(site?.id||'')===(scoreStation?.id||'')&&rowsReadyId===ds.id){render({skipStationEvent:true});return;}
+  const previousEnd=stationWindow();
+  stationRegion=next;scoreStation=site?{id:String(site.id),name:site.name||String(site.id)}:null;
+  if(previousEnd!==stationWindow()&&datePreset!==null)setDates(datePreset);
+  document.dispatchEvent(new CustomEvent('gridstationscopechange'));
+  const target=ds,range={...(stationRowsRange||stationDateRange(target))};
+  range.start=$('start').value;range.end=$('end').value;
+  range.leads=displayLeads(target).join(',');
+  delete range.station;delete range.region;
+  if(scoreStation)range.station=scoreStation.id;else if(next!=='all')range.region=next;
+  const current=++rowsSequence;rowsReadyId=null;datasetRows=[];
+  $('grid-workspace').setAttribute('aria-busy','true');
   try{
-    const response=await fetch('./api/catalog'+(ds?'?refresh=1':''),{cache:'no-store',signal:AbortSignal.timeout(65000)});
-    if(!response.ok)throw new Error('HTTP '+response.status);
-    const next=await response.json();if(!Array.isArray(next.rows)||!next.datasets?.length)throw new Error('暂无可识别的检验归档');
-    await window.DemoModels.ready();stationLoading=null;catalog=C.demoCatalog(C.unifiedCatalog(next),window.DemoModels.profiles(),WN3);
-    const combined=catalog.datasets.find(d=>matchesPrevious(d,previous));
-    const preferred=combined?.id;
-    if(combined&&previous!==combined.id&&!preferences.datasets[combined.id]){
-      const saved=preferences.datasets[previous]||{};
-      preferences.datasets[combined.id]={...saved,models:previous?.startsWith('compare:')?saved.models:combined.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m))};
+    const rows=await loadStationDataset(target,range);
+    if(current!==rowsSequence||ds?.id!==target.id)return;
+    datasetRows=rows.filter(r=>r.dataset===ds.id);rowsReadyId=ds.id;stationRowsRange=range;
+    if(next==='xj'&&!site){selectedBeforeXj??=new Set(selected);selected=new Set(ds.models.filter(m=>datasetRows.some(r=>r.model===m)));}
+    else if(next!=='xj'&&selectedBeforeXj){selected=selectedBeforeXj;selectedBeforeXj=null;}
+    render({skipStationEvent:true});
+  }catch(error){
+    if(current!==rowsSequence)return;
+    $('load-error').hidden=false;$('load-error').textContent=error.message;
+  }finally{if(current===rowsSequence)$('grid-workspace').setAttribute('aria-busy','false');}
+}
+const setStationRegion=region=>setStationScope(region);
+const setStationScore=site=>setStationScope(stationRegion,site);
+function setDetailLead(lead){
+  if(!Number.isFinite(Number(lead)))return;
+  stateLead=Number(lead);$('lead').value=String(stateLead);render();
+}
+
+/* ---------- reference / group switching ---------- */
+async function setReference(reference,preferred){
+  if(!['grid','station'].includes(reference))return false;
+  if(reference===gridReference)return true;
+  const sequence=++referenceSequence,previous=gridReference;
+  try{
+    if(!catalog&&!(await window.GridVerification.open()))return false;
+    if(reference==='station')await ensureStationRows();
+    if(sequence!==referenceSequence)return false;
+    remember();const g=currentGroup(),old=ds,oldState=preferences.datasets[old?.id];
+    gridReference=reference;
+    if(reference==='grid'&&page==='map')page='metric';
+    const list=datasetsForGroup(g);
+    if(!list.length){
+      const fallback=GROUPS.find(candidate=>datasetsForGroup(candidate).length);
+      if(!fallback){gridReference=previous;return false;}
+      groupId=fallback.id;kind=fallback.kind;if(fallback.field)circulationField=fallback.field;
+      metricKey=pendingMetric||metricKey;renderNav();
+      return loadGroup(fallback,metricKey);
     }
-    preferences.unifiedVersion=1;
+    const target=list.find(d=>d.id===preferred)||preferredDatasetFor(g)||list[0];
+    if(target&&oldState&&!preferences.datasets[target.id]){
+      const added=defaultModels(target).filter(m=>!(old.models||[]).includes(m));
+      const carried=oldState.models.length===defaultModels(old).length&&oldState.models.every(m=>defaultModels(old).includes(m))?defaultModels(target):unique([...oldState.models.filter(m=>target.models.includes(m)),...added]);
+      preferences.datasets[target.id]={...oldState,models:carried,knownModels:[...(old.models||[])]};
+    }
+    localStorage.setItem('gridReference',reference);
+    $('dataset').value=target.id;
+    return await loadGroup(g,metricKey);
+  }catch(error){gridReference=previous;$('load-error').hidden=false;$('load-error').textContent=error.message;return false;}
+}
+async function openGroup(id,metric){
+  const g=GROUPS.find(x=>x.id===id);if(!g||!window.GridVerification)return false;
+  const workspace=$('grid-workspace');
+  if(workspace.hidden){
+    if(typeof activateVerificationModule==='function')activateVerificationModule('grid');
+    else {workspace.hidden=false;if(typeof activateVerificationModule!=='function')document.querySelectorAll('[data-module]').forEach(b=>{const on=b.dataset.module==='grid';b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});}
+  }
+  if(!catalog&&!(await window.GridVerification.open()))return false;
+  groupId=id;kind=g.kind;if(g.field)circulationField=g.field;page='metric';
+  // A group may only exist in one reference (100 m wind is grid-only).
+  if(!datasetsForGroup(g).length){
+    const other=gridReference==='station'?'grid':'station';
+    if(allDatasetsForGroup(g).some(d=>(d.source==='station')===(other==='station'))){
+      gridReference=other;
+      if(other==='station')await ensureStationRows();
+    }
+  }
+  const defs=groupMetricDefs(g),wanted=[metric,metricKey].find(m=>defs.some(d=>d.key===m));
+  if(!ds||!groupMatchesDataset(g,ds)||!referenceMatches(ds))return loadGroup(g,wanted||defs[0]?.key);
+  metricKey=wanted||defs[0]?.key||'TS';
+  if(metricKey==='performance')chartMode='lead';
+  render();
+  return true;
+}
+async function changeKind(value,preferred){
+  const group=GROUPS.find(g=>g.id===value)||GROUPS.find(g=>g.kind===value);
+  if(!group)return false;
+  if(preferred&&catalog)preferences.groupDatasets[group.id]=preferred;
+  return openGroup(group.id);
+}
+
+/* ---------- load ---------- */
+async function load(){
+  automaticModels=true;
+  if(ds)remember();
+  const previous=ds?.id||preferences.dataset;
+  let success=false;
+  $('refresh').disabled=true;$('load-error').hidden=true;$('catalog-status-wrap').hidden=false;$('catalog-status').textContent='读取资料…';
+  try{
+    const response=await fetch('./api/catalog?format=metadata'+(ds?'&refresh=1':''),{cache:'no-store',signal:AbortSignal.timeout(65000)});
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    const next=await response.json();if(!next.datasets?.length)throw new Error('暂无可识别的检验归档');
+    ++rowsSequence;rowsReadyId=null;stationRowsCache=new Map();
+    rowsLoader=rowsLoaderFor(next);
+    await window.DemoModels.ready();stationLoading=null;
+    catalog=C.demoCatalog(C.unifiedCatalog(next),window.DemoModels.profiles(),WN3);
+    if(previous){
+      const combined=catalog.datasets.find(d=>matchesPrevious(d,previous));
+      if(combined&&previous!==combined.id&&!preferences.datasets[combined.id]){
+        const saved=preferences.datasets[previous]||{};
+        preferences.datasets[combined.id]={...saved,models:previous?.startsWith('compare:')?saved.models:combined.models.filter(m=>m!=='Google WeatherNext 2'&&!window.DemoModels.profile(m))};
+      }
+    }
     if(gridReference==='station')await ensureStationRows();
-    setKind(catalog.datasets.some(d=>d.kind===targetKind)?targetKind:'降水',preferred);
-    $('catalog-status').textContent='';$('catalog-status-wrap').hidden=true;success=true;
+    const savedData=catalog.datasets.find(d=>matchesPrevious(d,preferences.dataset));
+    let targetGroup=GROUPS.find(g=>g.id===preferences.groupId)
+      ||(savedData?GROUPS.find(g=>g.kind===savedData.kind&&(!g.element||g.element===savedData.element)&&(!g.field||g.field===(preferences.circulationField||'height'))):null)
+      ||GROUPS.find(g=>g.kind===preferences.kind)
+      ||GROUPS.find(g=>g.id===groupId)||GROUPS[0];
+    if(!datasetsForGroup(targetGroup).length)targetGroup=availableGroups()[0]||targetGroup;
+    groupId=targetGroup.id;kind=targetGroup.kind;if(targetGroup.field)circulationField=targetGroup.field;
+    const hashPage=hashTarget(parseHashPage(location.hash));
+    if(hashPage?.groupId)targetGroup=GROUPS.find(g=>g.id===hashPage.groupId)||targetGroup;
+    if(hashPage?.page==='info')page='info';
+    if(hashPage?.page==='map')page='map';
+    if(hashPage?.mode)chartMode=hashPage.mode;
+    const metric=hashPage?.metric;
+    if(!datasetsForGroup(targetGroup).length)targetGroup=availableGroups()[0]||targetGroup;
+    const preferred=preferences.groupDatasets[targetGroup.id]||previous;
+    success=await loadGroup(targetGroup,metric||preferences.datasets[preferred]?.metric);
+    if(page==='info')renderInfoPage();
+    if(page==='map')render();
   }catch(error){
     $('load-error').hidden=false;$('load-error').textContent='检验资料暂时无法读取，请稍后点击“刷新资料”重试。'+(catalog?'下方保留上一次成功读取的结果。':'');
     $('catalog-status').textContent=catalog?'显示上次读取的资料':'资料暂不可用';
@@ -659,51 +1200,146 @@ async function load(){
   }finally{$('refresh').disabled=false;}
   return success;
 }
-// Station products join only the browser catalog. Grid catalog/API and score reducers stay shared.
-async function ensureStationRows(){
-  if(stationLoading)return stationLoading;
-  const target=catalog;
-  stationLoading=(async()=>{
-    const response=await fetch('./api/stations/grid-datasets',{cache:'no-store'});
-    if(!response.ok)throw Error('站点资料暂不可用');
-    const datasets=await response.json();if(!datasets.length)throw Error('站点共用图表尚未完成离线评分');
-    const products=await Promise.all(datasets.map(async dataset=>{
-      const response=await fetch('./api/stations/grid-rows?'+new URLSearchParams({dataset:dataset.id}),{cache:'no-store'});
-      if(!response.ok)throw Error('站点图表资料暂不可用');
-      return {dataset,rows:await response.json()};
-    }));
-    if(target!==catalog)return;
-    for(const product of products){target.datasets.push(product.dataset);target.rows=target.rows.concat(product.rows);}
-    target.origins=[...(target.origins||[]),...datasets];
-  })().catch(error=>{stationLoading=null;throw error;});
-  return stationLoading;
+function matchesPrevious(d,id){return d.id===id||d.aliases?.includes(id)||(id?.startsWith('compare:')&&d.source_ids?.some(s=>id.slice(8).split('+').includes(s)));}
+
+/* ---------- remember ---------- */
+function remember(){
+  if(!ds||rowsReadyId!==ds.id)return;
+  const state={models:[...selected],knownModels:[...ds.models],metric:metricKey,page,chartMode,lead:stateLead,threshold:Number($('threshold').value),hour:$('hour').value,days:datePreset??7,start:$('start').value,end:$('end').value};
+  if(stationDataset())Object.assign(state,{stationDatePreset:datePreset!==null,stationWindowEnd:stationWindow()});
+  if(kind==='环流'){preferences.circulationField=circulationField;preferences.circulationLevel=ds.level;}
+  if(['环流','地面'].includes(kind)&&!stationDataset())preferences.referenceByKind[kind]=ds.reference;
+  preferences.kind=kind;preferences.groupId=groupId;preferences.dataset=ds.id;preferences.groupDatasets[groupId]=ds.id;preferences.datasets[ds.id]=state;
+  try{localStorage.setItem('szverify-workbench-v2',JSON.stringify(preferences));}catch{}
 }
-async function changeKind(value,preferred){
-  try{if(gridReference==='station'&&['降水','气温'].includes(value))await ensureStationRows();setKind(value,preferred);}
-  catch(error){$('load-error').hidden=false;$('load-error').textContent=error.message;}
+
+/* ---------- exports ---------- */
+$('export-csv').onclick=exportCsv;
+$('export-svg').onclick=()=>{
+  const svgs=[...$('chart').querySelectorAll('svg')];if(!svgs.length)return;
+  const NS='http://www.w3.org/2000/svg',style=document.createElementNS(NS,'style');
+  style.textContent='text{font-family:"Microsoft YaHei",sans-serif;font-size:11px;fill:#718593}.grid{stroke:#edf2f5;stroke-width:1}.axis{stroke:#d5e1e9;stroke-width:1}';
+  const prepared=svg=>{
+    const copy=svg.cloneNode(true);copy.removeAttribute('style');
+    for(const point of copy.querySelectorAll('.point')){const desc=point.querySelector('desc');if(desc){const title=document.createElementNS(NS,'title');title.textContent=desc.textContent;desc.replaceWith(title);}for(const name of ['role','tabindex','aria-pressed'])point.removeAttribute(name);point.classList.remove('is-selected');}
+    return copy;
+  };
+  let out;
+  if(svgs.length===1){out=prepared(svgs[0]);out.prepend(style);}
+  else{
+    // Small multiples are exported as one nested-SVG mosaic (two columns).
+    const W=560,H=430,cols=2,rows=Math.ceil(svgs.length/cols);
+    out=document.createElementNS(NS,'svg');out.setAttribute('xmlns',NS);out.setAttribute('viewBox',`0 0 ${W*cols} ${H*rows}`);
+    const background=document.createElementNS(NS,'rect');background.setAttribute('width','100%');background.setAttribute('height','100%');background.setAttribute('fill','white');out.append(background);
+    svgs.forEach((svg,index)=>{
+      const copy=prepared(svg);
+      copy.setAttribute('x',String((index%cols)*W));copy.setAttribute('y',String(Math.floor(index/cols)*H));
+      copy.setAttribute('width',String(W));copy.setAttribute('height',String(H));
+      copy.setAttribute('viewBox',svg.getAttribute('viewBox')||`0 0 ${W} ${H}`);
+      out.append(copy);
+    });
+    out.prepend(style);
+  }
+  download(new Blob([new XMLSerializer().serializeToString(out)],{type:'image/svg+xml;charset=utf-8'}),`${activeModels().some(m=>window.DemoModels.profile(m))?'WN3演示_':''}检验_${exportElement()}_${metricKey}.svg`);
+};
+
+/* ---------- events ---------- */
+document.addEventListener('click',event=>{
+  const group=event.target.closest('[data-kind]');
+  if(group&&group.closest('#detail-nav')){event.preventDefault();openGroup(group.dataset.kind);return;}
+  const metric=event.target.closest('[data-metric]');
+  if(metric&&metric.closest('#detail-nav')){event.preventDefault();openGroup(groupId,metric.dataset.metric);return;}
+  const detailPage=event.target.closest('[data-page]');
+  if(detailPage&&detailPage.closest('#detail-nav')){
+    event.preventDefault();
+    if(detailPage.dataset.page==='info')openPage('info');
+    else if(detailPage.dataset.page==='map')openPage('map');
+    return;
+  }
+});
+async function openPage(name,group){
+  if(group&&group!==groupId&&!(await openGroup(group)))return false;
+  if(!catalog){
+    if(typeof activateVerificationModule==='function')activateVerificationModule('grid');
+    if(!(await window.GridVerification.open()))return false;
+  }
+  page=name;render();return true;
 }
-async function setReference(reference){
-  if(!['grid','station'].includes(reference))return false;
-  const sequence=++referenceSequence,previous=gridReference;
-  try{
-    if(!catalog&&!(await window.GridVerification.open()))return false;
-    if(reference==='station')await ensureStationRows();
-    if(sequence!==referenceSequence)return false;
-    remember();const old=ds,oldState=preferences.datasets[old?.id];gridReference=reference;
-    const target=catalog.datasets.find(d=>d.kind===kind&&referenceMatches(d)&&d.accumulation===old?.accumulation)
-      ||catalog.datasets.find(d=>d.kind===kind&&referenceMatches(d));
-    if(target&&oldState&&!preferences.datasets[target.id])preferences.datasets[target.id]={...oldState,models:oldState.models.length===defaultModels(old).length&&oldState.models.every(m=>defaultModels(old).includes(m))?defaultModels(target):oldState.models.filter(m=>target.models.includes(m))};
-    localStorage.setItem('gridReference',reference);$('load-error').hidden=true;
-    setKind(kind,target?.id);return true;
-  }catch(error){gridReference=previous;$('load-error').hidden=false;$('load-error').textContent=error.message;return false;}
-}
-function stationSelection(){
-  const models=activeModels();
-  return {station:stationDataset(),kind,model:models[0],modelLabel:label(models[0]),models:models.map(model=>({model,label:label(model),color:color(model)})),variable:ds?.var,
-    start:$('start').value,end:$('end').value,leads:ds?ds.leads.filter(lead=>groupActive()?C.inLeadGroup(lead,leadGroup):manyLeads()||lead===Number($('lead').value)):[],
-    allLeads:ds?ds.leads:[],
-    updated:ds?.updated,metric:$('metric').value,threshold:Number($('threshold').value),lead:Number($('lead').value),reference:gridReference};
-}
-let gridLoading=null;
-window.GridVerification={setReference,selection:stationSelection,reference:()=>gridReference,open(){if(catalog){window.DemoModels.gridNotice(kind,activeModels());return Promise.resolve(true);}if(!gridLoading)gridLoading=load().finally(()=>gridLoading=null);return gridLoading;},refresh:load};
+$('detail-page-select').onchange=event=>{
+  const value=event.target.value;
+  if(value==='info'){openPage('info');return;}
+  const index=value.lastIndexOf(':');
+  const id=value.slice(0,index),metric=value.slice(index+1);
+  if(metric==='map'){openGroup(id).then(()=>openPage('map'));return;}
+  openGroup(id,metric);
+};
+document.querySelectorAll('[data-chart-mode]').forEach(b=>b.onclick=()=>{chartMode=b.dataset.chartMode;if(chartMode!=='lead')$('date-lead-label').hidden=false;render();});
+$('date-lead').onchange=event=>{stateLead=Number(event.target.value);$('lead').value=String(stateLead);render();};
+$('models-default').onclick=()=>{automaticModels=true;render();};
+$('hour').onchange=()=>render();
+$('metric').onchange=()=>{metricKey=$('metric').value;if(metricKey==='performance')chartMode='lead';render();};
+$('threshold').onchange=()=>render();
+$('lead').onchange=()=>{stateLead=Number($('lead').value)||stateLead;render();};
+$('common').onchange=()=>render();
+for(const id of ['start','end'])$(id).onchange=()=>{datePreset=null;document.querySelectorAll('[data-days]').forEach(b=>b.classList.remove('chosen'));if(stationDataset()){remember();setDataset();}else render();};
 $('refresh').onclick=load;
+window.addEventListener('hashchange',async()=>{
+  if(!location.hash.startsWith('#grid'))return;
+  const params=parseHashPage(location.hash);
+  const ref=params.get('ref');
+  if(ref&&window.GridVerification)await setReference(ref);
+  // A station id typed into the address bar switches the single-station scope; render reloads its rows.
+  const wanted=params.get('station')||'';let stationChanged=false;
+  if(gridReference==='station'&&STATION_ID.test(wanted)&&wanted!==scoreStation?.id){
+    const known=stationSites?.find(site=>site.id===wanted);
+    if(known||!stationSites){scoreStation=known?{...known}:{id:wanted,name:wanted};stationChanged=true;}
+  }
+  const target=hashTarget(params);
+  if(!target){if(ref||stationChanged)render();return;}
+  if(target.page==='info'){page='info';render();return;}
+  if(target.page==='map'){page='map';if(target.groupId)await openGroup(target.groupId);render();return;}
+  if(target.groupId)await openGroup(target.groupId,target.metric);
+  else if(target.metric)await openGroup(groupId,target.metric);
+  if(target.mode){if(target.mode==='date'&&metricKey==='performance')metricKey=groupMetricDefs(currentGroup())[0]?.key||'TS';chartMode=target.mode;render();}
+  else if(stationChanged)render();
+});
+
+/* ---------- overview deep link ---------- */
+let overviewDetailSequence=0;
+async function openOverviewDetail(hash){
+  const token=++overviewDetailSequence,params=parseHashPage(hash);
+  const element=params.get('element'),day=Number(params.get('day')),days=params.get('days');
+  if(!['rain','t'].includes(element)||![1,2,3].includes(day)||!['3','7','15'].includes(days))return;
+  const current=()=>token===overviewDetailSequence&&!$('grid-workspace').hidden;
+  if(!(await window.GridVerification.open())||!current())return;
+  if(!(await setReference('station'))||!current())return;
+  const group=element==='rain'?'降水':'气温';
+  await openGroup(group,element==='rain'?'TS':'ACC2');
+  if(!current()||!stationDataset())return;
+  page='metric';chartMode='lead';stationRegion='all';scoreStation=null;
+  stateLead=day*24;$('lead').value=String(stateLead);
+  setDates(Number(days));datePreset=Number(days);
+  render();
+}
+window.GridVerification={
+  openOverviewDetail,setReference,setStationRegion,setStationScore,setDetailLead,selection:stationSelection,reference:()=>gridReference,
+  open(){if(catalog){window.DemoModels.gridNotice(kind,activeModels());return Promise.resolve(true);}if(!gridLoading)gridLoading=load().finally(()=>gridLoading=null);return gridLoading;},
+  refresh:load
+};
+let gridLoading=null;
+$('station-score-reset').addEventListener('click',()=>setStationRegion(stationRegion));
+{
+  const input=$('station-pick');
+  // Emptying the box on focus lets the browser offer the whole list; leaving restores the current station.
+  input.addEventListener('focus',()=>{input.value='';});
+  input.addEventListener('input',()=>stationPickCommit(false));
+  input.addEventListener('change',()=>{if(!stationPickCommit(true))stationPickSync();});
+  input.addEventListener('keydown',event=>{
+    if(event.key==='Enter'){event.preventDefault();stationPickCommit(true);}
+    else if(event.key==='Escape')input.blur();
+  });
+  input.addEventListener('blur',()=>setTimeout(stationPickSync,0));
+}
+
+/* Static navigation before the catalog arrives, so the sidebar is usable from the overview. */
+renderNav();

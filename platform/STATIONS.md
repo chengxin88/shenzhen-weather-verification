@@ -1,6 +1,6 @@
 # 站点检验模块 v1
 
-降水/气温页的「格点 | 站点」现在选择参考资料，共用原来的控件、图表、评分明细及 SVG/CSV 导出；深链接为 `/Verification/test/#grid&ref=station`。站点范围为华南104–121°E、18–27°N，使用近31天有效时间、0–168小时预报时效；降水只有6/24小时累计。站点默认比较EC 0.1°与EC 0.25°，其余模式可在原模式按钮中选择。原独立页 `/Verification/test/#stations` 保留，提供近1/3/7/30天汇总及露点、气压、风速等原要素。时间在配对库中存为UTC，主图行及日期筛选使用北京时间。
+降水/气温/地面页的「格点 | 站点」现在选择参考资料，共用原来的控件、图表、评分明细及 SVG/CSV 导出；深链接为 `/Verification/test/#grid&ref=station`。站点范围为华南104–121°E、18–27°N，使用近31天有效时间、0–240小时预报时效；降水只有6/24小时累计。站点默认比较EC 9 km与EC 0.25°，其余模式可在原模式按钮中选择。原独立页 `/Verification/test/#stations` 保留，提供近1/3/7/30天汇总及露点、气压、风速等原要素。时间在配对库中存为UTC，主图行及日期筛选使用北京时间。
 
 DOM流程检查使用可选的jsdom开发依赖：`NODE_PATH=/tmp/st-jsdom/node_modules node test_stations_frontend.js`。本次依赖仅安装在`/tmp/st-jsdom`，不是页面或后端运行依赖；测试响应不写入服务数据。当前受限环境的Chrome渲染器启动失败，DOM测试不替代正式浏览器的排版复核。
 
@@ -35,15 +35,17 @@ DOM流程检查使用可选的jsdom开发依赖：`NODE_PATH=/tmp/st-jsdom/node_
 
 ## 预报及配对
 
-EC 0.1°是`ECMWF-IFS-9km-OpenMeteo`本地固定起报区域缓存，直接导入现有`openmeteo_regional.py`的manifest/field/sample读取与校验逻辑，未向Open-Meteo请求新预报。0–90小时为逐小时，之后至144小时为3小时，之后为6小时；06/18 UTC起报只到144小时。
+EC 9 km是`ECMWF-IFS-9km-OpenMeteo`本地固定起报区域缓存，直接导入现有`openmeteo_regional.py`的manifest/field/sample读取与校验逻辑，未向Open-Meteo请求新预报。0–90小时为逐小时，之后至144小时为3小时，之后为6小时；06/18 UTC起报只到144小时。
 
 降水时间语义核对了[Open-Meteo开放数据说明](https://github.com/open-meteo/open-data#updates-to-real-time-weather-forecasts)、[IFS原生步长说明](https://open-meteo.com/en/docs/ecmwf-api)以及本地`precipitation.json`的source_times：`data_run`保持原生时间分辨率，降水是向后累计量且不含起报时刻。因而lead=93覆盖(90,93]，lead=150覆盖(144,150]，不是前一小时雨量，也不乘3/6或再作累计差分。实现先最近邻采样各原生雨量，再严格拼接完整时段；与原有`rain()`使用相同的原生步长规则，避免整幅区域场相加。
 
 EC/GFS/ECAI/GFSAI/GEFS复用`native_archive.py`身份、时间、网格、存储校验及有界加载。优先原归档，再用原平台`cache/native-backfill/`填补；GEFS实际位于其中。慢盘目录优先复用`native-scores.json`已发现路径及各模式`catalog.json`，发现结果持久化，只在无索引时做一次目录枚举。各字段使用只读mmap，仅访问站点邻点，不物化全球场。每批站点样本持久化为NPZ，后续观测变化不必重复采样归档。
 
+EC 集合平均（模式id `ecens`，格点名`ECMWF-ENSEMBLES平均`）来自`fetch_ecmwf_ens.py`（`weather-ecens.timer`）：ECMWF开放数据ENS 50个扰动成员的2米气温与总降水在本机求平均，0.25°，裁剪108–120°E、18–27°N，帧位于`cache/native-backfill/ecens/`，格式同GEFS区域帧。0–144小时每3小时（rain3h），150–240小时每6小时（rain6h）。要素：2米气温、降水、100米及10米风、海平面气压、2米露点（成员平均，可用 --params 选择）；2026-11-02起裁剪104–121°E，06/18Z起报到144小时。数据自2026-10-24 00Z起。
+
 0.25°归档实际存在3小时和6小时雨量。仅采用rain_start与有效时间匹配的rain3h/rain6h，6小时可由两段3小时或一段6小时组成，24小时同理，全部同一起报且连续、不重叠，缺任一段即缺测。气温和RH在四个原生邻点计算Magnus露点后再双线性插值。风先插值u/v，再计算风速。仅有气温/降水的GEFS或其他产品不补造风、露点和气压。
 
-WN3使用现有已验证的原生**0.1°集合均值**清单和NPZ读取器，仅气温及rain1h，不误称0.25°，不使用显示JSON、演示别名或不存在的地面要素。逐小时雨量连续累加。SYNOP只在UTC 00/03/06…/21整点配对；METAR在模型有效时刻±10分钟内选最近的一整份报告，报告内缺测字段不另换较远报告填补，等距取较早报告。0.25°仅在实际三小时时次配对，EC 0.1°可逐小时配METAR；缺预报时刻不作时间插值。超出覆盖范围不外推。
+WN3使用现有已验证的原生**0.1°集合均值**清单和NPZ读取器，仅气温及rain1h，不误称0.25°，不使用显示JSON、演示别名或不存在的地面要素。逐小时雨量连续累加。SYNOP只在UTC 00/03/06…/21整点配对；METAR在模型有效时刻±10分钟内选最近的一整份报告，报告内缺测字段不另换较远报告填补，等距取较早报告。0.25°仅在实际三小时时次配对，EC 9 km可逐小时配METAR；缺预报时刻不作时间插值。超出覆盖范围不外推。
 
 气温、露点、海平面气压、u/v双线性；降水最近邻。本版没有海拔订正。站高来自站表；归档有明确以米为单位的海拔字段时才记录模式格点海拔，差值超过300m在图上标▲。当前本地产品未提供可确认的地形字段时，页面显示未知，不能据此断言海拔相符。
 
@@ -58,7 +60,7 @@ WN3使用现有已验证的原生**0.1°集合均值**清单和NPZ读取器，�
 API只有GET：
 
 - `api/stations/meta`：站点、观测源最新时间、模式实际配对范围、资料数和海岸线。
-- `api/stations/scores?var=t&models=ec01,ecmwf&days=30&range=0-168`：逐时效及站图所需汇总。days支持1/3/7/30，range支持0-168、0-24、25-72、73-168；变量为t/td/msl/wind/rain6/rain24。模式ID为ec01/ecmwf/gfs/aifs/aigfs/gefs/wn3。
+- `api/stations/scores?var=t&models=ec01,ecmwf&days=30&range=0-240`：逐时效及站图所需汇总。days支持1/3/7/30，range支持0-240、0-24、25-72、73-168、169-240；变量为t/td/msl/wind/rain6/rain24。模式ID为ec01/ecmwf/gfs/aifs/aigfs/gefs/wn3。
 - `api/stations/station?id=59493&var=t&model=ec01&lead=24&days=30`：固定时效单站统计及至多1000个时序点；不向浏览器发送全配对库。
 
 共用图表新增GET接口，站点行不写入 `api/catalog`：
@@ -79,7 +81,7 @@ STATIONS_CACHE_DIR="$PWD/cache/stations" nice -n 10 ionice -c3 \
 
 此命令写所选快照的新产品，只能对本工作树的副本执行；预览不得指向生产站点缓存。行数、压缩大小、日统计表大小及耗时写入快照 `grid-status.json`。
 
-站图复用平台现有华南海岸线，沿用SVG图表与现有CSS变量，支持键盘选择站点、深浅色、模式对比与单站曲线。各模式默认使用各自有效配对，样本数可不同，不能把此表当作严格共同样本排名。维护报告另按run/lead/station/var/实况来源完全相同的EC 0.1°、EC 0.25°、GFS共同配对给出D1–D5比较。
+站图复用平台现有华南海岸线，沿用SVG图表与现有CSS变量，支持键盘选择站点、深浅色、模式对比与单站曲线。各模式默认使用各自有效配对，样本数可不同，不能把此表当作严格共同样本排名。维护报告另按run/lead/station/var/实况来源完全相同的EC 9 km、EC 0.25°、GFS共同配对给出D1–D5比较。
 
 ## 刷新、验证与回滚
 
@@ -136,3 +138,11 @@ setsid nohup ./run_preview.sh > /tmp/preview-8524.log 2>&1 < /dev/null &
 私有副本实测：main baseline 54.67 分钟 / 453.0 MiB；首次实时源迁移轮 36.21 分钟 / 446.7 MiB；含精度迁移的连续 B2 28.39 分钟 / 443.6 MiB。推进 3 小时终点的 B3 成功完成，GNU time 为 27:20.26 / 487.9 MiB（499,644 KiB），9 个全量和 112 个局部 run，插入 19,091 条 pairs，总计 5,744,053 条。**B3 未达到约 20 分钟目标**：仅预报源身份检查就用时 20.41 分钟，采样/配对/SQL 另用 4.10 分钟；保留现有 timeout，不能据此宣称 15–20 分钟达标。冻结输入 B1 的 5.48 分钟不含真实源发现/读取，不作为日常运行耗时。同终点重复轮及各阶段明细见报告。
 
 首次同终点重复轮为 24:00.90 / 476.1 MiB，但期间 GFS、EC0.1 与两个 WN3 run 的源发生变化，重算 4 个 run / 插入 551 条 pairs，因此不能当作无变化轮。B3 与首次重复轮的 supervisor 和子进程各调用一次 `nice -n 10`，叠加后实际 nice=19；后续无变化验证改为单层 nice=10，全部使用 `ionice -c3`。耗时比较需保留这一调度差异，不能把 B3 的实测超时目标直接外推到所有生产运行。
+
+## 2026-11-03 地面站点检验
+
+地面页支持海平面气压（`msl` / `mslp`，hPa）和10米风速（`wind` / `wind10`，m/s）站点检验，复用格点/站点切换、主图与明细、地图、单站曲线及导出。站点风只检验风速，使用RMSE/ME/MAE/CC；格点风保持VRMSE。100米风场没有对应站点产品，选择后回到格点检验。
+
+离线`grid_aggregates()`为两种连续量生成逐次空间评分和日统计，地图及区域统计按连续量合并；不会使用降水阈值或事件计数。新数据集ID为`station-地面-msl`、`station-地面-wind10`。不新增数据下载，仍只使用已配对的实况与预报。
+
+验证：`test_station_grid.py`覆盖空间/区域/地图统计、起报时次与单站序列；`test_surface_stations.js`覆盖地面资料切换、单位、风速口径、100米排除及切回。

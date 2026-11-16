@@ -11,10 +11,15 @@ from pathlib import Path
 from cartopy.io.shapereader import Reader
 from shapely.geometry import box
 
-from station_common import BOX, ROOT
+from station_common import BOX, ROOT, XJ_BOUNDS
 
 # Map, station selection and scoring share one extent, including the 27 N cap.
 MAP_BOX = BOX
+# Lines also reach the Xinjiang view; the plot clips them to whichever frame is showing.
+LINE_BOX = (88., BOX[1], BOX[2], 47.)
+# Pearl River Delta / Hong Kong detail layers for zoomed maps (~200 m tolerance).
+DETAIL_BOX = (112.8, 21.6, 115.2, 23.3)
+TOLERANCE, DETAIL_TOLERANCE = .015, .002
 
 
 def lines(geometry):
@@ -30,9 +35,16 @@ def lines(geometry):
 
 
 def build(source):
-    extent = box(*MAP_BOX)
     result = dict(map_bounds=list(MAP_BOX), station_bounds=list(BOX), map_source='Natural Earth 1:10m / WGS84',
-                  coastline=[], country_boundaries=[], province_boundaries=[])
+                  detail_bounds=list(DETAIL_BOX), xj_bounds=list(XJ_BOUNDS),
+                  xj_landmarks=[dict(name='巴里坤3风电场', lon=94.2, lat=44.4)])
+    result.update(layers(source, box(*LINE_BOX), TOLERANCE))
+    result.update({k + '_detail': v for k, v in layers(source, box(*DETAIL_BOX), DETAIL_TOLERANCE).items()})
+    return result
+
+
+def layers(source, extent, tolerance):
+    result = dict(coastline=[], country_boundaries=[], province_boundaries=[])
     sources = [('coastline', 'physical/ne_10m_coastline.shp'),
                ('country_boundaries', 'cultural/ne_10m_admin_0_boundary_lines_land.shp'),
                ('province_boundaries', 'cultural/ne_10m_admin_1_states_provinces_lines.shp')]
@@ -50,7 +62,7 @@ def build(source):
                         target = 'province_boundaries'
                 # Clip LINE geometry, never polygon exteriors: clipping must not
                 # invent a rectangular coastline along the viewport's edges.
-                clipped = record.geometry.intersection(extent).simplify(.015)
+                clipped = record.geometry.intersection(extent).simplify(tolerance)
                 result[target].extend(lines(clipped))
     return result
 

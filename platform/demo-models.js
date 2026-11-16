@@ -12,7 +12,7 @@ window.DemoModels=(()=>{
   }).catch(()=>{loadError=true;return null;}).finally(()=>{pending=null;});return pending;
  }
  function toolbar(module){
-  const box=by('module-demo-mode');if(!box)return;box.hidden=module==='interfaces';if(box.hidden)return;
+  const box=by('module-demo-mode');if(!box)return;box.hidden=['interfaces','grid','typhoon'].includes(module);
   const demo=module==='case'?caseDemo:monthlyDemo;
   const switchable=['case','monthly'].includes(module);
   box.innerHTML=`${switchable?`<div class="choice-buttons" role="group" aria-label="${module==='case'?'个例':'月降水'}资料通道"><button type="button" data-demo-mode="formal" aria-pressed="${!demo}">业务资料</button><button type="button" data-demo-mode="demo" aria-pressed="${demo}" ${loadError?'disabled':''}>WN3 演示资料</button></div>`:''}<p class="filter-note" id="module-demo-note">${loadError?'演示目录暂不可用，业务资料仍可正常查看。':module==='typhoon'?esc(meta?.unavailable.typhoon||'WN3尚无台风路径'):switchable?'新模式使用 WN3 演示资料；保留 WN3 实际起报、有效时间和网格，不计入正式模式排名。':'模式选项已增加 '+profiles().length+' 个 WN3 演示入口；点击对应模式即可查看同一来源的演示评分，不计入正式排名。'}</p>`;
@@ -28,11 +28,15 @@ window.DemoModels=(()=>{
  }
  function gridNotice(kind,models){
   if(currentModule!=='grid'||by('grid-workspace').hidden)return;
+  const box=by('module-demo-mode'),hasDemo=models.some(profile);
+  if(box)box.hidden=!hasDemo;
   const note=by('module-demo-note');if(!note)return;
-  note.textContent=kind==='环流'?meta?.unavailable.circulation||'WN3暂无高空场':models.some(profile)?'当前图表含 WN3 演示资料：所选新模式共用 WN3 真实评分，并非各模式自身预报，不计入正式排名。':'模式选项中新增 '+profiles().length+' 个 WN3 演示入口；点击对应模式查看。演示入口只使用本要素已有的 WN3 实况配对。';
+  note.textContent=kind==='环流'?'环流检验不提供 WN3 演示资料；图中 WN3 为真实高空评分（00Z/12Z 起报）。':models.some(profile)?'当前图表含 WN3 演示资料：所选新模式共用 WN3 真实评分，并非各模式自身预报，不计入正式排名。':'模式选项中新增 '+profiles().length+' 个 WN3 演示入口；点击对应模式查看。演示入口只使用本要素已有的 WN3 实况配对。';
  }
  async function openModule(module){
   currentModule=module;
+  if(module==='overview'){by('module-demo-mode').hidden=true;window.AssessmentOverview.open();return;}
+  if(module==='nowcast'){by('module-demo-mode').hidden=true;window.NowcastRain.open();return;}
   if(module==='quality'){by('module-demo-mode').hidden=true;window.DataQuality.open();return;}
   if(module==='stations'){by('module-demo-mode').hidden=true;window.StationVerification.open();return;}
   await ready();if(currentModule!==module)return;

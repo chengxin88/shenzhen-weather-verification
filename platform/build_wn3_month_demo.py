@@ -3,18 +3,22 @@ import argparse
 from datetime import datetime,timedelta,timezone
 import hashlib,json,os,sys,tempfile
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'gods-eye-weather/weather_backend'))
+from wn3_storage import read_path, union_glob
+
 import numpy as np
 import pandas as pd
 from scipy.interpolate import RegularGridInterpolator
 from shapely.geometry import Point,shape
 from shapely.ops import unary_union
 
-sys.path.append('/home/chengyang/verification-test')
+sys.path.append('/home/yjzx/verification-platform/verification-test')
 import native_archive as native
 from monthly_precip import counts,scores,WINDOWS,THRESHOLDS,THRESHOLD_NAMES
 
-APP=Path('/home/chengyang/ec-gfs-server')
-WEATHER=Path('/home/chengyang/gods-eye-weather/weather-data/region-v4/weathernext3')
+APP=Path('/home/yjzx/verification-platform/ec-gfs-server')
+WEATHER=Path('/home/yjzx/verification-platform/gods-eye-weather/weather-data/region-v4/weathernext3')
 BJT=timezone(timedelta(hours=8))
 WN3=native.WN3_MODEL
 
@@ -68,7 +72,7 @@ def main(month,destination):
         valid=day.replace(hour=12)
         if valid>now-timedelta(hours=1):continue
         filename=valid.astimezone(BJT).strftime('%Y%m%d%H')+'.pkl'
-        paths=[APP/'cache/OBSERVATION/grid'/filename,Path('/home/chengyang/verification-test/cache/obs-backfill/grid')/filename]
+        paths=[APP/'cache/OBSERVATION/grid'/filename,Path('/home/yjzx/verification-platform/verification-test/cache/obs-backfill/grid')/filename]
         path=next((p for p in paths if p.is_file()),None)
         if path is None:continue
         obs=pd.read_pickle(path)

@@ -1,0 +1,350 @@
+{
+  "title": "深圳市 · 个例检验",
+  "date": "2026-07-25",
+  "cases": [
+    {
+      "id": "2026-07-25",
+      "label": "2026-07-25 台风“红霞”",
+      "date": "2026-07-25",
+      "runs": [
+        {
+          "id": "2026072500",
+          "label": "08时"
+        },
+        {
+          "id": "2026072512",
+          "label": "20时"
+        }
+      ]
+    }
+  ],
+  "case": "2026-07-25",
+  "generation": "d23a4d85c08e92689750bbb1f070836ff99d62932cad58a33e5b1b12d1893c32",
+  "cache_version": "case-view-v2:case-native-v1",
+  "models": [
+    {
+      "id": "cma1",
+      "label": "CMA-GD 1km EC-MT",
+      "runs": {
+        "2026072500": [
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "cma3ec",
+      "label": "CMA-GD 3km ECM-MT",
+      "runs": {
+        "2026072500": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "cma3ggf",
+      "label": "CMA-GD 3km GGF",
+      "runs": {
+        "2026072500": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "cma3ggfmt",
+      "label": "CMA-GD 3km GGF-MT",
+      "runs": {
+        "2026072500": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "cma9",
+      "label": "CMA-GD 9km GGF-TRAMS",
+      "runs": {
+        "2026072500": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "pangu",
+      "label": "盘古 25km",
+      "runs": {
+        "2026072500": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "zhiji",
+      "label": "智霁 3km",
+      "runs": {
+        "2026072500": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "200",
+          "500",
+          "700",
+          "850",
+          "925",
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_200",
+          "verify_500",
+          "verify_700",
+          "verify_850",
+          "verify_925",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    },
+    {
+      "id": "feed",
+      "label": "FEED · 地面预报",
+      "runs": {
+        "2026072500": [
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ],
+        "2026072512": [
+          "compare_surface",
+          "compare_surface_6h",
+          "verify_compare_surface",
+          "verify_compare_surface_6h",
+          "verify_surface"
+        ]
+      }
+    }
+  ],
+  "runs": [
+    {
+      "id": "2026072500",
+      "label": "08时"
+    },
+    {
+      "id": "2026072512",
+      "label": "20时"
+    }
+  ],
+  "kinds": [
+    "降水",
+    "2米气温",
+    "10米风速",
+    "等压面",
+    "垂直廓线"
+  ],
+  "levels": [
+    "925",
+    "850",
+    "700",
+    "500",
+    "200"
+  ],
+  "sources": [
+    {
+      "id": "sz-open-data-v1",
+      "label": "深圳开放数据格点分析场"
+    },
+    {
+      "id": "ana-sfc-alpha",
+      "label": "地面实况分析 · alpha"
+    },
+    {
+      "id": "ana-sfc-gd",
+      "label": "地面实况分析 · gd"
+    },
+    {
+      "id": "ana-3d-alpha",
+      "label": "三维实况分析 · alpha"
+    }
+  ],
+  "reference": "深圳开放数据格点分析场",
+  "notice": "2026年7月25日08／20时起报；按实际有效时刻配对所选实况分析场，参考资料并非独立站点观测。"
+}

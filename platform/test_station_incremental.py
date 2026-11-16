@@ -204,7 +204,7 @@ class AggregateEquivalenceTests(unittest.TestCase):
                 for var in VARIABLES:
                     for threshold in THRESHOLDS.get(var,[None]):
                         expected+=score.stats_sql(db,['model','var','lead'],'valid>=? AND valid<=? AND var=?',(*params,var),var in THRESHOLDS,threshold)
-                actual=json.loads((root/f'scores-{days}.json').read_text())
+                actual=[r for r in json.loads((root/f'scores-{days}.json').read_text()) if not r.get('grade')]
                 self.assertEqual(len(actual),len(expected))
                 for left,right in zip(actual,expected):
                     self.assertEqual(left.keys(),right.keys())

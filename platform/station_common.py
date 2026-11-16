@@ -8,18 +8,25 @@ import os
 
 UTC = timezone.utc
 ROOT = Path(__file__).resolve().parent
-BOX = (104., 18., 121., 27.)
-REGION = f'华南 {BOX[0]:g}–{BOX[2]:g}°E / {BOX[1]:g}–{BOX[3]:g}°N'
-PROXY = 'http://127.0.0.1:17908'
+BOX = (97., 18., 123., 33.)
+REGION = f'中国南方 {BOX[0]:g}–{BOX[2]:g}°E / {BOX[1]:g}–{BOX[3]:g}°N'
+PROXY = ''
+# Scored on their own: they stay out of the southern pools and only show under their own map view.
+XINJIANG = {'52112': dict(name='淖毛湖', lon=95.1333, lat=43.6, elevation=469., ghcnh_id='CHM00052112'),
+            '52203': dict(name='哈密', lon=93.5167, lat=42.8167, elevation=739., ghcnh_id='CHI0000ZWHM'),
+            '51495': dict(name='十三间房', lon=91.7333, lat=43.2167, elevation=732., ghcnh_id='CHM00051495')}
+XJ_BOUNDS = (90., 41.2, 98., 45.8)
 VARIABLES = {'t': ('2米气温', '°C'), 'td': ('露点温度', '°C'),
              'msl': ('海平面气压', 'hPa'), 'wind': ('10米风速', 'm/s'),
-             'rain6': ('6小时降水', 'mm'), 'rain24': ('24小时降水', 'mm')}
-THRESHOLDS = {'rain6': [.1, 1, 5, 10, 25, 50], 'rain24': [.1, 10, 25, 50, 100]}
-MODELS = {'ec01': 'EC 0.1°', 'ecmwf': 'EC 0.25°', 'gfs': 'GFS',
-          'aifs': 'ECAI', 'aigfs': 'GFSAI', 'gefs': 'GEFS集合平均', 'wn3': 'WeatherNext 3 mean'}
-GRID_MODELS = dict(zip(MODELS, ('ECMWF-IFS-9km-OpenMeteo', 'ECMWF-IFS', 'NCEP-GFS',
-                               'ECAI', 'GFSAI', 'GEFS集合平均', 'Google WeatherNext 3（集合均值）')))
-GRID_DATASETS = {'t': 'station-气温-2m', 'rain6': 'station-降水-6', 'rain24': 'station-降水-24'}
+             'rain6': ('6小时降水', 'mm'), 'rain12': ('12小时降水', 'mm'), 'rain24': ('24小时降水', 'mm')}
+THRESHOLDS = {'rain6': [.1, 1, 5, 10, 25, 50], 'rain12': [.1, 1, 5, 10, 25, 50, 100], 'rain24': [.1, 10, 25, 50, 100, 250]}
+MODELS = {'ec01': 'EC 9 km', 'ecmwf': 'EC 0.25°', 'ecens': 'EC 集合平均', 'gfs': 'GFS',
+          'aifs': 'ECAI', 'aigfs': 'GFSAI', 'gefs': 'GEFS集合平均', 'wn3': 'WeatherNext 3 mean',
+          'wn3ml': 'WN3 订正（LightGBM）'}
+GRID_MODELS = dict(zip(MODELS, ('ECMWF-IFS-9km-OpenMeteo', 'ECMWF-IFS', 'ECMWF-ENSEMBLES平均', 'NCEP-GFS',
+                               'ECAI', 'GFSAI', 'GEFS集合平均', 'Google WeatherNext 3（集合均值）', 'WN3 订正（LightGBM）')))
+GRID_DATASETS = {'t': 'station-气温-2m', 'rain6': 'station-降水-6', 'rain12': 'station-降水-12', 'rain24': 'station-降水-24',
+                 'msl': 'station-地面-msl', 'wind': 'station-地面-wind10'}
 GRID_THRESHOLDS = sorted({t for values in THRESHOLDS.values() for t in values})
 # Both offline products use these additive sufficient statistics, in this order.
 MOMENTS = ('n', 'error', 'absolute', 'squared', 'sf', 'so', 'sff', 'soo', 'sfo')
@@ -48,7 +55,11 @@ def event_score(n, h, m, f):
 
 VERSION = 'stations-v1.0'
 # Offline score windows (days back from the scoring end time).
-DAY_WINDOWS = (1, 3, 7, 30)
+DAY_WINDOWS = (1, 3, 7, 15)
+# 2026-11-16 用户同意配对只留 16 天（为扩到 CMA-GD 全域省空间）：页面最长近15天，留 1 天余量（原来 31 天）。
+PAIR_DAYS = 16
+RUN_DAYS = PAIR_DAYS + 10   # 起报保留：配对天数 + 最长时效 240 小时（原来 38 天）
+COMMON_DAYS = 15            # 共同样本报告天数（原来 30）
 
 
 def cache_root():

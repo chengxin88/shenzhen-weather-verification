@@ -26,15 +26,19 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]/'gods-eye-weather/weather_backend'))
+from wn3_storage import read_path, union_glob
+
 
 UTC = timezone.utc
 BJT = timezone(timedelta(hours=8))
-APP_DIR = Path(os.getenv('QC_ALERT_APP_DIR', '/home/chengyang/verification-test'))
-WEATHER = Path(os.getenv('QC_WEATHER_ROOT', '/home/chengyang/gods-eye-weather/weather-data')) / 'region-v4'
-APP = Path(os.getenv('QC_APP_ROOT', '/home/chengyang/ec-gfs-server'))
+APP_DIR = Path(os.getenv('QC_ALERT_APP_DIR', '/home/yjzx/verification-platform/verification-test'))
+WEATHER = Path(os.getenv('QC_WEATHER_ROOT', '/home/yjzx/verification-platform/gods-eye-weather/weather-data')) / 'region-v4'
+APP = Path(os.getenv('QC_APP_ROOT', '/home/yjzx/verification-platform/ec-gfs-server'))
 SNAPSHOT = Path(os.getenv('QC_ALERT_SNAPSHOT', str(APP_DIR / 'cache/quality-control/snapshot.json')))
 STATE_DIR = Path(os.getenv('QC_ALERT_STATE', str(Path.home() / '.local/state/weather-qc-alert')))
-SCAN_PYTHON = os.getenv('QC_ALERT_SCAN_PYTHON', '/home/chengyang/.venvs/ec-gfs-server/bin/python')
+SCAN_PYTHON = os.getenv('QC_ALERT_SCAN_PYTHON', '/home/yjzx/verification-platform/venv/bin/python')
 SCAN_TIMEOUT = int(os.getenv('QC_ALERT_SCAN_TIMEOUT', '240'))
 MIN_GAP = int(os.getenv('QC_ALERT_MIN_GAP', '120'))        # 两次触发扫描的最小间隔（秒）
 PERIODIC = int(os.getenv('QC_ALERT_PERIODIC', '3600'))     # 无新数据时也定期复查（捕捉到报延迟）
@@ -195,7 +199,7 @@ def load_state():
 # ---------------------------------------------------------------- 发布签名
 
 def _manifest(path):
-    d = load_json(path)
+    d = load_json(read_path(path))
     if not isinstance(d, dict):
         raise ValueError('manifest')
     return d
@@ -212,7 +216,7 @@ def wn3_sig(now):
     base = now.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     for age in range(24):  # 与质控模块一致：逐小时探测最近 24 个批次清单
         run = base - timedelta(hours=age)
-        p = root / f'run_{run:%Y%m%d%H}.json'
+        p = read_path(root / f'run_{run:%Y%m%d%H}.json')
         if p.exists():
             d = _manifest(p)
             return f"{p.name}|{d.get('updated')}|{d.get('status')}|{len(d.get('frames') or [])}"

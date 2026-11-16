@@ -86,11 +86,46 @@ class GridProducts(unittest.TestCase):
             self.assertIn('IEM METAR', dataset['source_note'])
         for variable in ('rain6', 'rain24'):
             for row in self.rows(variable):
+                if row.get('grade'):continue
                 fc, ob = np.array([(p[6],p[7]) for p in self.pairs if GRID_MODELS[p[0]]==row['model']
                     and p[2]==row['lead'] and bjt(p[3])==row['valid'] and p[5]==variable]).T
                 yesf, yeso = fc>=row['threshold'], ob>=row['threshold']
                 self.assertEqual((row['n'], row['H'], row['M'], row['F']),
                     (len(fc), sum(yesf & yeso), sum(~yesf & yeso), sum(yesf & ~yeso)))
+
+    def test_surface_scalar_rows_metadata_and_region_scores(self):
+        datasets = {d['var']: d for d in station_api.grid_datasets()}
+        for variable, element, unit in [('msl', 'mslp', 'hPa'), ('wind', 'wind10', 'm/s')]:
+            dataset = datasets[variable]
+            self.assertEqual((dataset['kind'], dataset['element'], dataset['unit']), ('地面', element, unit))
+            self.assertEqual(dataset['thresholds'], [])
+            for row in self.rows(variable):
+                pairs = [p for p in self.pairs if GRID_MODELS[p[0]] == row['model'] and p[2] == row['lead']
+                         and bjt(p[3]) == row['valid'] and p[5] == variable]
+                self.assert_maths(row, pairs)
+                self.assertNotIn('H', row)
+                self.assertNotIn('VRMSE', row)
+            with patch.object(station_api, 'region_stations', return_value=['59000', '59001']):
+                rows = station_api.grid_rows(dict(dataset=GRID_DATASETS[variable], region='sz',
+                                             start='2026-10-24', end='2026-10-24', leads='24'))
+            for row in rows:
+                pairs = [p for p in self.pairs if GRID_MODELS[p[0]] == row['model'] and p[2] == 24
+                         and bjt(p[3])[:10] == '2026-10-24' and p[5] == variable and p[4] in ('59000', '59001')]
+                self.assert_maths(row, pairs)
+        self.assertFalse(any(d.get('element') == 'wind100' for d in datasets.values()))
+
+    def test_surface_products_survive_an_older_inflight_publication(self):
+        legacy = self.directory.parent/'20261027T000000'
+        legacy.mkdir()
+        datasets = [d for d in station_api.grid_datasets() if d['var'] not in ('msl', 'wind')]
+        atomic_json(legacy/'grid-datasets.json', datasets)
+        atomic_json(self.root/'current.json', dict(generation=legacy.name))
+        actual = station_api.grid_datasets()
+        self.assertEqual({d['var'] for d in actual}, set(GRID_DATASETS))
+        self.assertEqual(next(d for d in actual if d['var']=='wind')['grid_snapshot'], self.directory.name)
+        self.assertEqual(station_api.grid_rows_file(dict(dataset=GRID_DATASETS['msl'])).parent, self.directory)
+        result = station_api.map_scores(dict(var='wind', model='ec01', lead='24', start='2026-10-24', end='2026-10-24'))
+        self.assertEqual(len(result['rows']), 4)
 
     def test_map_subsets_match_direct_pair_scores_and_do_not_write(self):
         before = {p.name:(p.stat().st_mtime_ns, p.stat().st_size) for p in self.directory.iterdir()}
@@ -105,7 +140,7 @@ class GridProducts(unittest.TestCase):
                     for row in rows:
                         pairs = [p for p in self.pairs if p[0]=='ec01' and p[4]==row['station'] and p[5]==variable
                                  and p[2] in leads and start<=bjt(p[3])[:10]<=end]
-                        if variable == 't': self.assert_maths(row, pairs)
+                        if variable not in THRESHOLDS: self.assert_maths(row, pairs)
                         else:
                             fc, ob = np.array([(p[6],p[7]) for p in pairs]).T
                             yf, yo = fc>=threshold, ob>=threshold
@@ -119,7 +154,7 @@ class GridProducts(unittest.TestCase):
                     var='t',lead=24,start='2026-10-24',end='2026-10-24')))
         self.assertEqual([r['valid'] for r in result['series']], ['2026-10-23T18:00:00Z','2026-10-24T15:00:00Z'])
         for query in ['start=2026-02-30&end=2026-10-24', 'start=2026-10-25&end=2026-10-24',
-                      'start=2026-10-24&end=2026-10-24&lead=169',
+                      'start=2026-10-24&end=2026-10-24&lead=241',
                       'start=2026-10-24&end=2026-10-24&lead=24&leads=24,48',
                       'start=2026-10-24&end=2026-10-24&var=rain6&threshold=2',
                       'start=2026-10-24&end=2026-10-24&models=ec01',
@@ -161,7 +196,7 @@ class GridProducts(unittest.TestCase):
                 self.assertEqual(sum(r['n'] for r in result['rows']),len(expected))
                 for row in result['rows']:
                     selected = [p for p in expected if p[4]==row['station']]
-                    if variable=='t': self.assert_maths(row,selected)
+                    if variable not in THRESHOLDS: self.assert_maths(row,selected)
                     else:
                         fc,ob = np.array([(p[6],p[7]) for p in selected]).T
                         yf,yo = fc>=threshold,ob>=threshold

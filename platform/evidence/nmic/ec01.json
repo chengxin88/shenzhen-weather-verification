@@ -1,0 +1,17 @@
+{
+  "requests": 2,
+  "successful_requests": 1,
+  "run": "2026-11-03T00:00:00+00:00",
+  "stations": 176,
+  "pairs": 57198,
+  "by_variable": {
+    "t": 8448,
+    "td": 8448,
+    "msl": 8446,
+    "wind": 8448,
+    "rain6": 8272,
+    "rain12": 7920,
+    "rain24": 7216
+  },
+  "forecast": "actual anonymous Open-Meteo single-run response; native step sums from saved hourly response"
+}

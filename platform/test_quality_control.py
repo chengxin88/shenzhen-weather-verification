@@ -371,5 +371,77 @@ class QualityControlTests(unittest.TestCase):
         np.save(p,np.ones((2,2),dtype=np.float64))
         with self.assertRaises(ValueError):qc.native_array(p,(2,2))
 
+    def test_host_without_wn2_downloader_is_not_an_error(self):
+        s=qc.wn2_source(self.app,self.now,self.rules,time.monotonic()+10)
+        self.assertEqual(s['kind'],'reserved');self.assertEqual(s['arrival']['status'],'reserved')
+        self.assertEqual(s['issues'],[])
+        (self.app/'cache').mkdir();(self.app/'cache/weathernext2-prefetch-status.json').write_text('{}')
+        broken=qc.wn2_source(self.app,self.now,self.rules,time.monotonic()+10)
+        self.assertEqual(broken['kind'],'actual')
+        self.assertTrue(any(i['code']=='catalog_invalid' and i['severity']=='error' for i in broken['issues']))
+
+    def test_missing_wn3_queue_is_silent_but_broken_queue_is_reported(self):
+        root=self.wn3()
+        s=qc.wn3_source(self.weather,self.now,self.rules,time.monotonic()+10)
+        self.assertFalse(any(i['code']=='queue_unavailable' for i in s['issues']))
+        (root/'backfill-queue.json').write_text('[]')
+        s=qc.wn3_source(self.weather,self.now,self.rules,time.monotonic()+10)
+        self.assertTrue(any(i['code']=='queue_unavailable' for i in s['issues']))
+
+    def test_retry_message_names_leads_and_reason(self):
+        text=qc.retry_message([{'lead':36,'reason':'EC precipitation accumulation decreased'},
+            {'lead':120,'reason':'EC precipitation accumulation decreased'},{'lead':216,'reason':'AI precipitation cannot form exact six-hour interval'},
+            {'lead':6,'reason':'something new'}])
+        self.assertIn('4 个时效未入库',text);self.assertIn('+36h、+120h（累计降水比前一时效小）',text)
+        self.assertIn('+216h（凑不出完整的 6 小时降水）',text);self.assertIn('+6h（未通过入库校验）',text)
+        self.assertEqual(qc.retry_message({'a':1}),'1 个时效未入库，等待下载程序重试。')
+
+    def report(self,when,status,available,expected,run=None,kind='actual'):
+        arrival={'status':status,'available_frames':available,'expected_frames':expected}
+        if run is not None: arrival.update(qc.times(run,'latest_run'))
+        return {'generated_utc':when.isoformat(),'sources':[{'id':'gfs','kind':kind,'arrival':arrival}]}
+
+    def test_history_logs_arrival_per_run_and_keeps_first_completion(self):
+        next_run=self.run+timedelta(hours=6)
+        steps=[(0,'available',3,3,self.run),(60,'partial',1,3,next_run),(90,'available',3,3,next_run),(120,'delayed',3,3,next_run)]
+        for minutes,status,available,expected,run in steps:
+            qc.record_history(self.cache,self.report(self.now+timedelta(minutes=minutes),status,available,expected,run))
+        rows=json.loads((self.cache/'history.json').read_text())['sources']['gfs']
+        self.assertEqual([r['run_utc'] for r in rows],[self.run.isoformat(),next_run.isoformat()])
+        self.assertTrue(rows[0]['baseline']);self.assertFalse(rows[1]['baseline'])
+        self.assertEqual(rows[1]['first_seen_utc'],(self.now+timedelta(minutes=60)).isoformat())
+        self.assertEqual(rows[1]['complete_utc'],(self.now+timedelta(minutes=90)).isoformat())
+        with patch.object(qc,'CACHE',self.cache): view=qc.history_view(self.now+timedelta(hours=3))
+        recent=view['sources']['gfs']['recent']
+        self.assertTrue(recent[0]['latest']);self.assertEqual(recent[0]['lag_hours'],3.5)
+        self.assertIsNone(recent[1]['lag_hours'])  # on disk before logging began
+        self.assertEqual(len(view['sources']['gfs']['days']),7)
+        self.assertEqual(sum(d['runs'] for d in view['sources']['gfs']['days']),2)
+        self.assertEqual(sum(d['complete'] for d in view['sources']['gfs']['days']),2)
+
+    def test_history_separates_still_downloading_from_superseded_incomplete(self):
+        later=self.run+timedelta(hours=6)
+        qc.record_history(self.cache,self.report(self.now,'available',3,3,self.run-timedelta(hours=6)))
+        qc.record_history(self.cache,self.report(self.now+timedelta(minutes=5),'partial',2,3,self.run))
+        with patch.object(qc,'CACHE',self.cache): days=qc.history_view(self.now+timedelta(hours=1))['sources']['gfs']['days']
+        self.assertEqual((sum(d['pending'] for d in days),sum(d['runs']-d['complete']-d['pending'] for d in days)),(1,0))
+        qc.record_history(self.cache,self.report(self.now+timedelta(minutes=10),'delayed',2,3,self.run))  # old and still short
+        qc.record_history(self.cache,self.report(self.now+timedelta(minutes=15),'partial',1,3,later))
+        with patch.object(qc,'CACHE',self.cache): days=qc.history_view(self.now+timedelta(hours=1))['sources']['gfs']['days']
+        self.assertEqual((sum(d['pending'] for d in days),sum(d['runs']-d['complete']-d['pending'] for d in days)),(1,1))
+
+    def test_history_skips_unmonitored_sources_drops_old_runs_and_survives_damage(self):
+        qc.record_history(self.cache,self.report(self.now,'reserved',None,None,kind='reserved'))
+        self.assertEqual(json.loads((self.cache/'history.json').read_text())['sources'],{})
+        qc.record_history(self.cache,self.report(self.now,'available',3,3,self.now-timedelta(days=9)))
+        qc.record_history(self.cache,self.report(self.now,'available',3,3,self.run))
+        rows=json.loads((self.cache/'history.json').read_text())['sources']['gfs']
+        self.assertEqual([r['run_utc'] for r in rows],[self.run.isoformat()])
+        (self.cache/'history.json').write_text('{"schema":1,"since_utc":"2026-10-13T00:00:00+00:00","sources":{"gfs":[7,{"run_utc":null}]}}')
+        qc.record_history(self.cache,self.report(self.now,'available',3,3,self.run))
+        self.assertEqual(len(json.loads((self.cache/'history.json').read_text())['sources']['gfs']),1)
+        (self.cache/'history.json').write_text('not json')
+        with patch.object(qc,'CACHE',self.cache): self.assertIsNone(qc.history_view(self.now))
+
 
 if __name__=='__main__': unittest.main()

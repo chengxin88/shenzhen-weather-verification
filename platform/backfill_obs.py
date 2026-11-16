@@ -10,7 +10,7 @@ Usage (cwd ~/ec-gfs-server for APP_KEY): backfill_obs.py START_BJT END_BJT [HOUR
 import os, sys, tempfile, time
 from datetime import datetime, timedelta
 from pathlib import Path
-sys.path.insert(0, '/home/chengyang/ec-gfs-server')
+sys.path.insert(0, '/home/yjzx/verification-platform/ec-gfs-server')
 import requests, urllib3
 import prefetch_observation_hour as hourly
 

@@ -1,0 +1,77 @@
+{
+  "baseline": "tools/guifan_test_results.json",
+  "python": {
+    "baseline_total": 195,
+    "final_total": 205,
+    "passed": 191,
+    "failures": 4,
+    "errors": 10,
+    "new_failures": [],
+    "unchanged_failures": [
+      "test_month_integrity_and_private_provenance (test_module_demo.Metadata.test_month_integrity_and_private_provenance)",
+      "test_month_scientific_counts_from_same_run_hourly_fields (test_module_demo.Metadata.test_month_scientific_counts_from_same_run_hourly_fields)",
+      "test_month_time_identity_and_missing_days (test_module_demo.Metadata.test_month_time_identity_and_missing_days)",
+      "test_download_and_scoring_agree_on_the_speed_field (test_station_xinjiang.WN3Speed.test_download_and_scoring_agree_on_the_speed_field)",
+      "test_all_demo_routes_and_formal_routes_remain_pending (test_wn3_demo.HTTPDemo.test_all_demo_routes_and_formal_routes_remain_pending)",
+      "test_all_grid_interfaces_preserve_wn3_identity_and_original_values (test_wn3_demo.RealSample.test_all_grid_interfaces_preserve_wn3_identity_and_original_values)",
+      "test_corrupt_sample_rejected_and_missing_sample_graceful (test_wn3_demo.RealSample.test_corrupt_sample_rejected_and_missing_sample_graceful)",
+      "test_no_fabricated_minute_fields_different_batch_or_window (test_wn3_demo.RealSample.test_no_fabricated_minute_fields_different_batch_or_window)",
+      "test_real_source_and_same_run_trailing_rain_sum (test_wn3_demo.RealSample.test_real_source_and_same_run_trailing_rain_sum)",
+      "test_scores_match_real_paired_arrays (test_wn3_demo.RealSample.test_scores_match_real_paired_arrays)",
+      "test_routes_and_static_assets (test_module_demo.HTTP.test_routes_and_static_assets)",
+      "test_full_map_coverage_and_real_linework (test_station_basemap.StationBasemapTests.test_full_map_coverage_and_real_linework)",
+      "test_explicit_proxy_does_not_inherit_metered_link (test_stations.DownloadAndIncrementalTests.test_explicit_proxy_does_not_inherit_metered_link)",
+      "test_preview_refresh_cannot_rebuild_any_catalog (test_stations.StationHTTPTests.test_preview_refresh_cannot_rebuild_any_catalog)"
+    ]
+  },
+  "node": {
+    "baseline_files": 10,
+    "final_files": 11,
+    "passed": 9,
+    "new_failures": [],
+    "unchanged_failed_files": [
+      "test_grid_stations_frontend.js",
+      "test_stations_frontend.js"
+    ]
+  },
+  "incremental_qc": {
+    "tests": 6,
+    "passed": 6
+  },
+  "overview_api": {
+    "tests": 10,
+    "passed": 10,
+    "cache_hit_test": "50 calls total <1 second; no SQLite connections"
+  },
+  "browser": {
+    "source": "Chrome with synthetic overview data; file URLs and external resolution disabled",
+    "layouts": [
+      {
+        "width": 320,
+        "page": 320,
+        "card": 270,
+        "table": 820,
+        "overflow": []
+      },
+      {
+        "width": 390,
+        "page": 390,
+        "card": 340,
+        "table": 820,
+        "overflow": []
+      },
+      {
+        "width": 1440,
+        "page": 1440,
+        "card": 1152,
+        "table": 1152,
+        "overflow": []
+      }
+    ]
+  },
+  "commands": {
+    "python": "/home/chengyang/.venvs/ec-gfs-server/bin/python -m unittest discover",
+    "node": "NODE_PATH=/tmp/guifan-jsdom/node_modules node --test test_*.js",
+    "incremental_qc": "/home/chengyang/.venvs/ec-gfs-server/bin/python -m unittest discover -s incremental-qc"
+  }
+}
