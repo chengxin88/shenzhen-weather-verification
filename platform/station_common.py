@@ -9,6 +9,9 @@ import os
 UTC = timezone.utc
 ROOT = Path(__file__).resolve().parent
 BOX = (97., 18., 123., 33.)
+CMAGD_BOX = (93.64, 16.60, 126.34, 42.88)
+CMAGD_MODELS = ('ecmwf', 'gfs', 'aifs', 'aigfs')
+CMAGD_NOTICE = '这个区域里新加的国家站只评 EC 0.25°、GFS、ECAI、GFSAI 四个模式。'
 REGION = f'中国南方 {BOX[0]:g}–{BOX[2]:g}°E / {BOX[1]:g}–{BOX[3]:g}°N'
 PROXY = ''
 # Scored on their own: they stay out of the southern pools and only show under their own map view.
@@ -83,6 +86,22 @@ def iso(value):
 
 def in_box(lon, lat):
     return BOX[0] <= lon <= BOX[2] and BOX[1] <= lat <= BOX[3]
+
+
+def in_cmagd(lon, lat):
+    return CMAGD_BOX[0] <= lon <= CMAGD_BOX[2] and CMAGD_BOX[1] <= lat <= CMAGD_BOX[3]
+
+
+def model_allowed(station, model):
+    return not station.get('cmagd_extended', False) or model in CMAGD_MODELS
+
+
+def legacy_exclusions(db):
+    """Offline producers set a private roster; direct legacy callers keep XJ only."""
+    extra = ()
+    if db.execute("SELECT 1 FROM sqlite_temp_master WHERE name='cmagd_extended'").fetchone():
+        extra = (r[0] for r in db.execute('SELECT station FROM cmagd_extended'))
+    return frozenset((*XINJIANG, *extra))
 
 
 def digest(value):

@@ -55,7 +55,7 @@ class WindowPolicy(unittest.TestCase):
 
     def test_strict_majority_mixed_sources_empty_and_dynamic_membership(self):
         flags = api.window_metadata(self.metadata)['region_nmic_majority']
-        self.assertEqual(flags, dict(all=False, hn=True, hun=False, gba=True, hk=False, sz=False, xj=True))
+        self.assertEqual(flags, dict(all=False, cmagd=False, hn=True, hun=False, gba=True, hk=False, sz=False, xj=True))
         self.assertFalse(api.nmic_majority('gba', []))
         stations = [dict(s) for s in self.stations]
         stations[0]['sources'] = ['ogimet']  # 2/5, no hardcoded hn/gba exception

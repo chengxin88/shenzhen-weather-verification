@@ -247,7 +247,10 @@ def select_observations(rows, stations):
         # 没有的时次和要素仍用原来源）；其余只补空。2026-11-12 加入湖南（43），和华南同样处理。
         # 每个键的值始终只来自一个来源。
         primary = {s['id'] for s in stations if str(s.get('province_code')) in ('43', '44', '45', '46')}
+        metadata_only = {s['id'] for s in stations if s.get('nmic_cmagd_metadata_only')}
         for item in rows:
+            if item['source'] == 'nmic' and item['station'] in metadata_only:
+                continue
             at = stamp(item['time'])
             if item['source'] == 'nmic' and not item['flags'] and item['station'] in synop and not (at.minute or at.second or at.hour % 3):
                 key = (item['station'], item['time'], item['var'])

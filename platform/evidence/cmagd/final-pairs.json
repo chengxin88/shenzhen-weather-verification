@@ -1,0 +1,8 @@
+{
+  "equal": true,
+  "checked_pairs": 317470,
+  "total_pairs": 317470,
+  "mismatches": 0,
+  "examples": [],
+  "evidence": "最终代码重新取样、选择真实实况并生成配对，与此前完整重放产物全部列精确相等"
+}

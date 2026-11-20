@@ -17,6 +17,13 @@ EXT_LEADS = [int(h) for h in range(174, 241, 6)]
 
 
 def fetch_run(session: requests.Session, ident: str, stations: list[dict]) -> dict[int, dict] | None:
+    from station_common import model_allowed
+    from station_forecasts import station_targets
+    roster = stations
+    _, expand = station_targets(roster, 'ec01')
+    stations = [s for s in roster if model_allowed(s, 'ec01')]
+    if not stations:
+        return {}
     dt = datetime.strptime(ident, "%Y%m%d%H").replace(tzinfo=timezone.utc)
     lats = ",".join(f"{st.get('lat'):.4f}" for st in stations)
     lons = ",".join(f"{st.get('lon'):.4f}" for st in stations)
@@ -89,7 +96,8 @@ def fetch_run(session: requests.Session, ident: str, stations: list[dict]) -> di
             "rain": rain[i],
             "rain_start": int(lead) - 6,
         }
-    return samples
+    return {h: {k: v if k == 'rain_start' else expand(v) for k, v in values.items()}
+            for h, values in samples.items()}
 
 
 def main():
@@ -132,7 +140,9 @@ def main():
         if samples is None:
             continue
         for target in targets:
-            sf.save_samples(target, sorted(samples), samples)
+            points = [[s['id'], s['lon'], s['lat']] for s in stations]
+            sf.save_samples(target, sorted(samples), samples,
+                            state=dict(version=sf.VERSION,station_signature=sf.digest(points),points=points))
         ok += 1
         print(f"OK ec01_{ident} in {time.time()-t0:.1f}s", flush=True)
         time.sleep(0.2)

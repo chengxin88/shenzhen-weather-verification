@@ -1,6 +1,6 @@
 {
-  "captured_date": "2026-11-16",
-  "source": "Spark verification-platform/verification-test (git f4538d8, branch spark)",
+  "captured_date": "2026-11-20",
+  "source": "Spark verification-platform/verification-test (git a0793c2, branch spark)",
   "files": [
     {
       "file": "CASE_PAGE_REPORT.md",
@@ -24,6 +24,12 @@
       "file": "DETAIL_REDESIGN_REPORT.md",
       "sha256": "e8272b197f4543e3c02a59f3a63b142655244fa415e7eb0af979b94b4b000ea7",
       "bytes": 6202,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "DONE_CMAGD",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
       "dereferenced_symlink": false
     },
     {
@@ -69,6 +75,12 @@
       "dereferenced_symlink": false
     },
     {
+      "file": "REPORT_CMAGD.md",
+      "sha256": "413eaf18877a5d6d1e4b7a9c26ea75495876faf37d936f530ac4d11274eb50f8",
+      "bytes": 26707,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "REPORT_NMIC.md",
       "sha256": "14d7b9eaf830fbcb6493f0a835a6e7d5c6c9c84ad3f394a5d907486579f50aee",
       "bytes": 18908,
@@ -102,6 +114,12 @@
       "file": "STATION_MAP.md",
       "sha256": "40f6a7d7314d351e590a125b48d8f74f0ad0625047ba98c66d650749ba1fc4eb",
       "bytes": 1742,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "TASK_CMAGD.md",
+      "sha256": "9f4445d044772c70bd50c817d0cd72ae6c7fc83af4d2aba6536b71310a07ccda",
+      "bytes": 9356,
       "dereferenced_symlink": false
     },
     {
@@ -148,8 +166,8 @@
     },
     {
       "file": "app.js",
-      "sha256": "e14e5c8326f4061c4f44db912d6be9717d25ed08f023aebc96d3772b8c74ee9b",
-      "bytes": 88816,
+      "sha256": "4986baffb53b1c58e12e7df9edb8eccdf4e8165a4ca33bc763e542b833fe03b4",
+      "bytes": 89502,
       "dereferenced_symlink": false
     },
     {
@@ -172,8 +190,8 @@
     },
     {
       "file": "build_station_basemap.py",
-      "sha256": "03ef78693985b870e3e12bcc41b0f5c003282cc8e7065e2b484ddf270a7b78c3",
-      "bytes": 3443,
+      "sha256": "f0421e7f17f30c47e69d6bdd96846ffa4de58ed870a58258ec12f17817ec6be5",
+      "bytes": 3599,
       "dereferenced_symlink": false
     },
     {
@@ -244,8 +262,8 @@
     },
     {
       "file": "compare_gateway.py",
-      "sha256": "223b12cfb09ecb094cfc5cb88e50bdb7eee04ca22078fd0e6cf359a647312ca2",
-      "bytes": 11756,
+      "sha256": "67a7f38646a2a9d373c2dc94f695e30c228ecef2ccb23efae3817879e3a83cd2",
+      "bytes": 11782,
       "dereferenced_symlink": false
     },
     {
@@ -429,6 +447,162 @@
       "dereferenced_symlink": false
     },
     {
+      "file": "evidence/cmagd/README.md",
+      "sha256": "7842bd9c50f34f0076b9a06c437670de01a73edb15344ba8057a6041e938d884",
+      "bytes": 1373,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/acceptance-tests.txt",
+      "sha256": "9d12a99a9f84c5678026c2a3000d55afe7a5fc2e3bb427c2f954adb83c213a87",
+      "bytes": 358,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/baseline-extra-tests.txt",
+      "sha256": "c11dd406cd2e21a15bde187379db91043ebc4f4ccecbd563c2d2d62eb244b4a3",
+      "bytes": 533,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/coverage.csv",
+      "sha256": "403933333b92aba013b11607598c2ccd97e99758403e7a8efdcdffeb155e3b37",
+      "bytes": 3932,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/coverage.json",
+      "sha256": "167f827bb90fa32f4a9afab3944f8bfead2133266c334d197d767ed2cd5e29f8",
+      "bytes": 145957,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/field-read.json",
+      "sha256": "d1e6ac4223deb67505cffc683d8841069183159dca0efac6af2ec49eaf0caa34",
+      "bytes": 129,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/final-pairs.json",
+      "sha256": "b20df2dc8ac1c3d2e7fc6032e2c04f8168a4a850ff4c0ea6da70b12b51b7c1f2",
+      "bytes": 238,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/frontend-tests.txt",
+      "sha256": "b1bb37f5d9213725096ebf21b906d267091647f17bd595ac9253d4b5e9882b24",
+      "bytes": 106,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/harness-baseline-first.json",
+      "sha256": "c93c3cabc7398802c37531f3f1032d39fe428e7b7c8f5c1971cd9bd5cd15b9e5",
+      "bytes": 742,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/harness-baseline-warm.json",
+      "sha256": "b983859e78721e1d9547abf8902b094bd053d1313a555ec591dd064aea984d07",
+      "bytes": 741,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/harness-candidate-first.json",
+      "sha256": "d1fbfc9da6d868cc84edfcd29cfa107ea0ca1a1a02b3690cd4aefd73207dced6",
+      "bytes": 743,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/harness-candidate-warm.json",
+      "sha256": "17e66aa9d5b9a8b11974ca23dfaa1da79f3555757be38674edc02753e660ccf0",
+      "bytes": 740,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/harness-smoke-first.json",
+      "sha256": "db41f0719af9c256d36f263c6a79dc3f17a528dd798553c594bf26d33e26733b",
+      "bytes": 972,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/harness-smoke-warm.json",
+      "sha256": "db41f0719af9c256d36f263c6a79dc3f17a528dd798553c594bf26d33e26733b",
+      "bytes": 972,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/import-summary.json",
+      "sha256": "4696b8b910133c5117e4b9311056e158a2f14c62f294dad080aba0d3c8809a09",
+      "bytes": 897,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/prior-2100-benchmark.json",
+      "sha256": "98c50c2091e9f45318b4067f9a3f134709d36cfee168d238fc2fe227c3368e76",
+      "bytes": 755,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/real-after-measurement.json",
+      "sha256": "58e87e3cc2c9c700baaa6ab949ea5ea4395fbdf4418cc5a5971f99e2ef9d1c34",
+      "bytes": 642,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/real-before-measurement.json",
+      "sha256": "4e2ba3c31f3ba5ae43ecf376037e86ba2775f465b08fe2aa62f9f7f0afffdb76",
+      "bytes": 634,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/real-equivalence.json",
+      "sha256": "007200a9d9b80fdf8592f9b214de656304e8274e6858e5a264143d6a219f4509",
+      "bytes": 1075,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/regions.json",
+      "sha256": "622845161ca6fd8775869776f2af0d36c9a9a7bca9f6fe11baf93382b6193d59",
+      "bytes": 793,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/requests.json",
+      "sha256": "b0a644365f783e19cb7475b8ef2da1918681d274f275cf12d51a49fc98adab24",
+      "bytes": 1788,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/scale.json",
+      "sha256": "a946a275f72e342ff8c060896d2e41eb9111c1aa29253feb1330ceb9c683f659",
+      "bytes": 714,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/scratch-retained.json",
+      "sha256": "502d09952ebd20c21d72df1ea280271f76d83b2a4de22592eec74bb9c61faaab",
+      "bytes": 1294,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/spark-refresh-status.json",
+      "sha256": "124980ea5334db57062f2f8c846cbe638f4acacbff1a29cf3724fc237cda1bf5",
+      "bytes": 1474,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/spark-score-status.json",
+      "sha256": "6ecc4656c5ac849dda1b41d982043c6b402e1068298a00b5f4efe691bc6de8a7",
+      "bytes": 1145,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "evidence/cmagd/stations-tests.txt",
+      "sha256": "a4a4814140f55e305f7d62483473352ff3928f3a5800f7919076e23c90e6f1c4",
+      "bytes": 826,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "evidence/monthly-page/after.png",
       "sha256": "02125dd9766be2822aef6574731f9557d1c24c656cac44e84d2674bef0853376",
       "bytes": 415519,
@@ -520,8 +694,8 @@
     },
     {
       "file": "fetch_ec01_extended.py",
-      "sha256": "df53746a3d909b2aff73daf56a46abe34020ffb0f41dc3769dd7fedaad8c2d30",
-      "bytes": 5516,
+      "sha256": "0650b5bb1b8f15e47d096dfea36babff8f742df5c4a1ef22c0128bddfe88ea2a",
+      "bytes": 6076,
       "dereferenced_symlink": false
     },
     {
@@ -556,8 +730,8 @@
     },
     {
       "file": "grid-stations.js",
-      "sha256": "e7f8c205450e1411e5def7190219803764c6c3ef9cc4352d6b325caec99c86aa",
-      "bytes": 11678,
+      "sha256": "d8f911b01f9f0b88766437eb5948d2eaa75a498e51cc76da532750d205089970",
+      "bytes": 11810,
       "dereferenced_symlink": false
     },
     {
@@ -586,8 +760,8 @@
     },
     {
       "file": "index.html",
-      "sha256": "72938877150d0fa8e6f3dc06963cdd7dc4652eb3e7d25daaa01aa645e76cb6c2",
-      "bytes": 11056,
+      "sha256": "8adb7fb564eb29420cde43f348d46d4cb00e67cb31df4cedb8a71a6176e51fda",
+      "bytes": 11177,
       "dereferenced_symlink": false
     },
     {
@@ -652,14 +826,14 @@
     },
     {
       "file": "nmic_ec01.py",
-      "sha256": "2cf6cda9b2562a3facfb9e8428afb8bee846ac58323ade63f11deae12a4efd05",
-      "bytes": 9261,
+      "sha256": "8595cdd0fba0311fb606443c851afd0df5efde77abda410cc684083117654dac",
+      "bytes": 9485,
       "dereferenced_symlink": false
     },
     {
       "file": "nmic_obs.py",
-      "sha256": "c52b38899d2e09a91507eb46dba748e565d90d02423d870cee093c0c7b97a5b2",
-      "bytes": 9287,
+      "sha256": "cfd38d2bd8a28aad216c4a364f4daf237975b0b991665b033054b4b556565def",
+      "bytes": 10979,
       "dereferenced_symlink": false
     },
     {
@@ -700,8 +874,8 @@
     },
     {
       "file": "overview.js",
-      "sha256": "46c7f58b3d54e9939fed1f5a4bfa2ed346a0c4a9a2d0cfe22916e9e47db28b12",
-      "bytes": 6129,
+      "sha256": "9ab6b24548eba5c8ece753c02b44ce18809a09ae99de6c191dd999a2134e1faa",
+      "bytes": 7497,
       "dereferenced_symlink": false
     },
     {
@@ -772,20 +946,20 @@
     },
     {
       "file": "station-basemap.json",
-      "sha256": "e86c34bb8dd42d0d40789199c6cbad6ea24623a037df2914e77c17fa10fb9dbd",
-      "bytes": 223717,
+      "sha256": "6d094654277f367ce7cdf23e89ab89da0b3a5d2c91d966b0180c8123882a325a",
+      "bytes": 416041,
       "dereferenced_symlink": false
     },
     {
       "file": "station_aggregate.py",
-      "sha256": "9448f87dff9f1c64cf8a46f730a246a01f82c26c2f0cb8b1c6b9fca11caaea7c",
-      "bytes": 18078,
+      "sha256": "fb166a14c413275f3ba135bafcab7c81140b7a9b87ec4deaa296d64e158691c0",
+      "bytes": 18222,
       "dereferenced_symlink": false
     },
     {
       "file": "station_aggregate_daily.py",
-      "sha256": "05d6e468e5b5697b84e68ea980faaf61736abbf7d52a9bd4637e271c987841c9",
-      "bytes": 24810,
+      "sha256": "04356cfc85fbd4a6f2b633011145f72e22029b377249a8e7511ed71b57dd9b38",
+      "bytes": 24888,
       "dereferenced_symlink": false
     },
     {
@@ -802,14 +976,14 @@
     },
     {
       "file": "station_api.py",
-      "sha256": "daf1a6a3dde34abe8be4bafd5e950a13f8bc6714592df46fe46dc290bec04434",
-      "bytes": 39291,
+      "sha256": "bd7b69b14b13d25e08b6b6d1d910a2bcbdfb75bb832b3ccffeaa03c7d27e54f9",
+      "bytes": 41083,
       "dereferenced_symlink": false
     },
     {
       "file": "station_common.py",
-      "sha256": "78ba32e0ef6e52af559051becce3065842a89fd55454ea946daa58f0dd7da4cc",
-      "bytes": 5120,
+      "sha256": "c19f386688e4e340f31cb5ccbac49ce08d197fa831cc61b251bb72064dcab438",
+      "bytes": 5889,
       "dereferenced_symlink": false
     },
     {
@@ -820,8 +994,8 @@
     },
     {
       "file": "station_forecasts.py",
-      "sha256": "fee4d0242197ef7acd308beb3eb296a21e757ce1b0938ff2132647de32cb7848",
-      "bytes": 46621,
+      "sha256": "c5ebda6b18bacd1997766a3ad823b20367984a30f6c495f560bb4ba2829a627c",
+      "bytes": 47935,
       "dereferenced_symlink": false
     },
     {
@@ -832,8 +1006,8 @@
     },
     {
       "file": "station_obs.py",
-      "sha256": "c9a13e918f24fee82b4cf7538a1991b6a0ec309941beaab9c5f93eb75786b713",
-      "bytes": 18527,
+      "sha256": "0279cdd71ef741eb0a833b5aae2e3cf30da22d8644117d4a2ae30d2d327efcf8",
+      "bytes": 18719,
       "dereferenced_symlink": false
     },
     {
@@ -844,8 +1018,8 @@
     },
     {
       "file": "station_score.py",
-      "sha256": "90411225a8928d28f070a757f8912a285fcad4f5ef15ed68060fff425f52be0e",
-      "bytes": 69665,
+      "sha256": "4a1b12cbc0e55d4cbd48841850ce26292db7bf39f98ac737c9bdc50056e2957a",
+      "bytes": 71446,
       "dereferenced_symlink": false
     },
     {
@@ -862,8 +1036,8 @@
     },
     {
       "file": "stations.js",
-      "sha256": "19d6c57252b839a1b533e676ee8e9172d1c28d93bacfa9d3560cc72004f77225",
-      "bytes": 43343,
+      "sha256": "2e06c15ea1ce321872d9c7925f5b3b3a7f798c210b3c944a7e362a98f9a8191b",
+      "bytes": 43788,
       "dereferenced_symlink": false
     },
     {
@@ -924,6 +1098,18 @@
       "file": "test_circulation_levels.py",
       "sha256": "1382314c2d3a5953374213993a538ead46065578bd3c50ae9532d1a7326b122f",
       "bytes": 3834,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_cmagd.py",
+      "sha256": "77f3bb4ab5091d551c4d66f719c9736e4c8929209c82a34779a1e9bc5c9f3b72",
+      "bytes": 16125,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "test_cmagd_frontend.js",
+      "sha256": "4ec0f803dc8f52ce2d168d52a85f45c5ca602829efc5b073a9d1a88c1cfc1f83",
+      "bytes": 2691,
       "dereferenced_symlink": false
     },
     {
@@ -988,8 +1174,8 @@
     },
     {
       "file": "test_nmic_window.py",
-      "sha256": "66c8b7799ab48eb80b7747346b28b29a4953991a5a63e65de58549e63f454709",
-      "bytes": 9471,
+      "sha256": "fb001dac1f2e98d9c137c2d30f069a43533c7e09149f454bc895bf3f002e7179",
+      "bytes": 9484,
       "dereferenced_symlink": false
     },
     {
@@ -1102,8 +1288,8 @@
     },
     {
       "file": "test_station_overview.py",
-      "sha256": "c2a9aa1fc630524793b71019fd2516db9d28fba829cf958fea7c41b67c0c8ba7",
-      "bytes": 10397,
+      "sha256": "3ba1d260c9c3d7e7818662f37ebc2d513fa13f1599156f19a762d07587eac315",
+      "bytes": 11369,
       "dereferenced_symlink": false
     },
     {
@@ -1197,6 +1383,12 @@
       "dereferenced_symlink": false
     },
     {
+      "file": "tools/audit_cmagd_requests.py",
+      "sha256": "12ba84a1088e3e9818bd3a403bdcedaa8ea6abbc454d424856b00863b75ba198",
+      "bytes": 3529,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "tools/benchmark_aggregate_daily.py",
       "sha256": "7142b773b9567b16d77416a4f145848fcbc412892b463479c6bbea509b9e9813",
       "bytes": 12761,
@@ -1212,6 +1404,12 @@
       "file": "tools/case_page_browser.js",
       "sha256": "b3981073530685833653c730b5b909c1e70c25165da6b1ffd263404110cdb25d",
       "bytes": 5394,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "tools/check_cmagd_equivalence.py",
+      "sha256": "7643c90e36b5a5a24cb26be3b0043049886eb03fcb3476433ae587ad885cbf75",
+      "bytes": 8460,
       "dereferenced_symlink": false
     },
     {
@@ -1242,6 +1440,12 @@
       "file": "tools/compare_station_runs.py",
       "sha256": "4de606cda1ce624323d9e43565fe1fed47de9f7e37f3dc65f22e0b6934d1fe3d",
       "bytes": 7027,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "tools/estimate_cmagd_scale.py",
+      "sha256": "2cfc0f02f797629a03d0cd9a9c4736f71fddadf283f0fe8844c1d6f986269295",
+      "bytes": 2951,
       "dereferenced_symlink": false
     },
     {
@@ -1281,9 +1485,27 @@
       "dereferenced_symlink": false
     },
     {
+      "file": "tools/prepare_cmagd_nmic.py",
+      "sha256": "610e58eb9720ad46840e1c8432ad602f50ed97030428246f47cef291c2b8be47",
+      "bytes": 6315,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "tools/replay_cmagd_sample.py",
+      "sha256": "7da6d24d7ad7870261e88f1f4e877817ae015ee433767f5970fd2d05ade32273",
+      "bytes": 5175,
+      "dereferenced_symlink": false
+    },
+    {
       "file": "tools/replay_nmic.py",
       "sha256": "78f6cae741691d96936f139e68402f83f0a4ce48163944b8b79b17daae81adb9",
       "bytes": 3805,
+      "dereferenced_symlink": false
+    },
+    {
+      "file": "tools/run_cmagd_comparison.py",
+      "sha256": "2e8b5279621eb90dd54fe94b977c9df6f836412aa6ea2cc57eca879bb7a7929a",
+      "bytes": 9416,
       "dereferenced_symlink": false
     },
     {

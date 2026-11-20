@@ -1,0 +1,32 @@
+{
+  "extended": 1556,
+  "pair_days": 16,
+  "run_days": 26,
+  "assumptions": "每天四个起报、完整 240 小时时效、全部要素可用；逐个配对器枚举，实际缺帧和缺测只会减少。首轮计入新资料起点造成的累计降水缺口。",
+  "per_station": {
+    "steady": {
+      "ecmwf": 28504,
+      "gfs": 35672,
+      "aifs": 18200,
+      "aigfs": 18200
+    },
+    "first": {
+      "ecmwf": 20659,
+      "gfs": 25859,
+      "aifs": 13174,
+      "aigfs": 13174
+    }
+  },
+  "added": {
+    "steady": 156496256,
+    "first": 113379496
+  },
+  "conservative_1657": {
+    "steady": 166654432,
+    "first": 120738962
+  },
+  "steady_legacy_assumed_range": [
+    85000000,
+    100000000
+  ]
+}

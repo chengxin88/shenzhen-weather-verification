@@ -16,7 +16,7 @@ import time
 import guifan_scores as guifan
 import numpy as np
 from station_common import (ROOT, XINJIANG, MODELS, THRESHOLDS, VARIABLES, VERSION, UTC, DAY_WINDOWS, REGION,
-                            PAIR_DAYS, RUN_DAYS, COMMON_DAYS,
+                            PAIR_DAYS, RUN_DAYS, COMMON_DAYS, model_allowed, legacy_exclusions,
                             GRID_MODELS, GRID_DATASETS, GRID_THRESHOLDS, MOMENTS, bjt, moment_score,
                             atomic_json, digest, finite, iso, now, read_json, stamp, sync_directory)
 from station_forecasts import accumulate, forecast_runs, file_signature, load_samples, save_samples, sample_state
@@ -81,13 +81,15 @@ def contingency(fc, ob, threshold):
 
 
 def pair_run(model, run, samples, observations, stations, cutoff, end, valid_times=None):
+    run_text = iso(run)
     intervals = {h: (float(s['rain_start']), s['rain']) for h, s in samples.items()
                  if 'rain' in s and 'rain_start' in s and math.isfinite(float(s['rain_start']))}
     for lead, sample in sorted(samples.items()):
         valid = run + timedelta(hours=lead)
+        valid_text = iso(valid)
         if not 0 <= lead <= 240 or not cutoff <= valid <= end:
             continue
-        if valid_times is not None and iso(valid) not in valid_times:
+        if valid_times is not None and valid_text not in valid_times:
             continue
         # Native 0.25-degree archives are admitted only at 3h nominal times.
         if model not in ('ec01', 'wn3') and (lead % 3 or valid.hour % 3):
@@ -99,13 +101,15 @@ def pair_run(model, run, samples, observations, stations, cutoff, end, valid_tim
                 values['rain' + str(hours)] = total
         for variable, array in values.items():
             for i, station in enumerate(stations):
-                observation = observations.get((station['id'], iso(valid), variable))
+                if not model_allowed(station, model):
+                    continue
+                observation = observations.get((station['id'], valid_text, variable))
                 fc = finite(array[i])
                 if observation is None or fc is None:
                     continue
                 if variable.startswith('rain') and fc < 0:
                     continue
-                yield (model, iso(run), lead, iso(valid), station['id'], variable, fc,
+                yield (model, run_text, lead, valid_text, station['id'], variable, fc,
                        observation['value'], observation['source'], int(observation.get('trace', False)),
                        observation.get('report_time', observation['time']))
 
@@ -404,6 +408,13 @@ def _aggregate_run(db, directory, end, stations=None, ends=None):
     The station n>1 rule remains distinct from grid n>=3.
     """
     import station_aggregate as fast
+    db.execute('CREATE TEMP TABLE IF NOT EXISTS cmagd_extended (station TEXT PRIMARY KEY) WITHOUT ROWID')
+    db.execute('DELETE FROM cmagd_extended')
+    if stations is None:
+        stations = read_json(Path(directory).parent.parent/'stations.json', {}).get('stations', [])
+    db.executemany('INSERT INTO cmagd_extended VALUES (?)',
+                   ((s['id'],) for s in stations if s.get('cmagd_extended')))
+    db.commit()
     ends = dict(ends) if ends else {days: end for days in DAY_WINDOWS}
     enabled = os.environ.get('STATIONS_AGGFAST', '1') != '0'
     tracked = bool(db.execute("SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='aggregate_state'").fetchone())
@@ -460,6 +471,11 @@ def aggregate_signature(directory,stations=None):
     import hashlib
     root = Path(directory).parent.parent
     table = read_json(root/'stations.json', read_json(ROOT/'stations.json'))
+    if table is not None:
+        # Import counters/latest time are diagnostics, not station geography.
+        # New NMIC files already dirty their changed pair days; invalidating
+        # the entire day cache here would turn every delivery into a cold run.
+        table = {k:v for k,v in table.items() if k != 'nmic'}
     files = ('station_score.py','station_aggregate.py','station_aggregate_daily.py','station_aggregate_native.c','station_detail_cache.py',
              'station_common.py','guifan_scores.py','station_api.py','nmic_provinces.json','nmic_obs.py','sz_district_obs.py')
     sites = None if stations is None else [{k:v for k,v in station.items() if k not in ('model_elevations','elevation_flags')} for station in stations]
@@ -545,6 +561,8 @@ def _aggregates(db, directory, end, groups=None, preserve=False, signature=None,
             expressions.append(f"SUM(var IN ('rain6','rain12','rain24') AND {condition})")
     expressions.extend(guifan.sql_expressions())
     ranges = [(0,240),(0,24),(25,72),(73,168),(169,240)]
+    excluded = legacy_exclusions(db)
+    south_only = 'station NOT IN (' + ','.join(repr(v) for v in sorted(excluded)) + ')'
     def add(pool, key, values):
         if key not in pool:
             pool[key] = list(values)
@@ -591,7 +609,7 @@ def _aggregates(db, directory, end, groups=None, preserve=False, signature=None,
             if preserve and getattr(groups,'pooled',False) and not groups.detail_changed:
                 continue
             if variable in THRESHOLDS and not getattr(groups,'pooled',False):
-                if station not in XINJIANG:add(leads,(model,variable,lead),values)
+                if station not in excluded:add(leads,(model,variable,lead),values)
                 for lo,hi in ranges:
                     if lo <= lead <= hi:add(stations,(station,model,variable,lo,hi),values)
             for threshold in THRESHOLDS.get(variable,[None]):
@@ -615,16 +633,16 @@ def _aggregates(db, directory, end, groups=None, preserve=False, signature=None,
         where = "valid>=? AND valid<=? AND var NOT IN ('rain6','rain12','rain24')"
         params = (cutoff,iso(stop))
         if groups is None:
-            continuous_leads = stats_sql(db,['model','var','lead'],where+' AND '+SOUTH_ONLY,params)
+            continuous_leads = stats_sql(db,['model','var','lead'],where+' AND '+south_only,params)
             continuous_stations = {(lo,hi):stats_sql(db,['station','model','var'],
                 where+' AND lead>=? AND lead<=?',(*params,lo,hi)) for lo,hi in ranges}
         else:
             window = DAY_WINDOWS.index(days)
             continuous_leads = [dict(model=m,var=v,lead=h,**pooled_score(values,variable=v))
                                 for m,v,h,*values in groups.rows('lead',window)]
-            if not _valid_sum_order(db,['model','var','lead'],where+' AND '+SOUTH_ONLY,params):
+            if not _valid_sum_order(db,['model','var','lead'],where+' AND '+south_only,params):
                 print('AGGFAST_SQL_ORDER_FALLBACK',days,'continuous leads',flush=True)
-                continuous_leads=stats_sql(db,['model','var','lead'],where+' AND '+SOUTH_ONLY,params)
+                continuous_leads=stats_sql(db,['model','var','lead'],where+' AND '+south_only,params)
             continuous_stations = {(lo,hi):[] for lo,hi in ranges}
             for st,m,v,lo,hi,*values in groups.rows('station',window):
                 continuous_stations[lo,hi].append(dict(station=st,model=m,var=v,**pooled_score(values,variable=v)))
@@ -713,6 +731,7 @@ def _grid_aggregates(db, directory, end, groups=None):
     materializes the station pairs in Python or adds indexes to the large DB.
     """
     started = time.monotonic()
+    south_only = 'station NOT IN (' + ','.join(repr(v) for v in sorted(legacy_exclusions(db))) + ')'
     directory = Path(directory)
     expressions = ['COUNT(*)', 'SUM(fc-ob)', 'SUM(ABS(fc-ob))', 'SUM((fc-ob)*(fc-ob))',
                    'SUM(fc)', 'SUM(ob)', 'SUM(fc*fc)', 'SUM(ob*ob)', 'SUM(fc*ob)']
@@ -739,7 +758,7 @@ def _grid_aggregates(db, directory, end, groups=None):
             temporary_files[variable] = path.with_name(path.name + '.next')
             handles[variable] = stack.enter_context(gzip.open(temporary_files[variable], 'wt', encoding='utf-8', compresslevel=6))
             handles[variable].write('[')
-        query = f'SELECT model,run,lead,valid,var,{sums} FROM pairs WHERE {where} AND {SOUTH_ONLY} GROUP BY model,run,lead,valid,var'
+        query = f'SELECT model,run,lead,valid,var,{sums} FROM pairs WHERE {where} AND {south_only} GROUP BY model,run,lead,valid,var'
         space_rows = db.execute(query,args) if groups is None else groups.rows('space')
         for model, run, lead, valid, variable, *values in space_rows:
             base = dict(dataset=GRID_DATASETS[variable], model=GRID_MODELS[model], run=bjt(run),
@@ -1025,12 +1044,20 @@ def _refresh(root, end, db):
         timings['forecast.'+first_model] -= timings.get('discover',0)
     for key,value in timings.items():
         if key.startswith(('forecast.','score.')):print('TIMING',key,round(value,3),'seconds',flush=True)
+    # Pairing is finished. The all-station observation dictionary can contain
+    # millions of rows; keep only the tiny Shenzhen sanity input while merging
+    # aggregate states, rather than adding both memory peaks together.
+    extended_ids = {s['id'] for s in stations if s.get('cmagd_extended')}
+    cmagd_nmic_end = max((r['time'] for r in observations.values() if r['source']=='nmic'),default=None)
+    nmic_end = max((r['time'] for k,r in observations.items() if r['source']=='nmic' and k[0] not in extended_ids),default=None)
+    stations_with_data = len({key[0] for key in observations})
+    sanity_observations = {k:v for k,v in observations.items() if k[0]=='59493' and k[2]=='t'}
+    del observations
     prune_snapshots(root)
     print('Publishing aggregates and daily pair files',flush=True)
     generation = now().strftime('%Y%m%dT%H%M%S%f')
     directory = root/'snapshots'/('.incomplete-'+generation); directory.mkdir(parents=True)
     with phase('aggregates',timings):
-        nmic_end = max((r['time'] for r in observations.values() if r['source']=='nmic'),default=None)
         ends = score_window_ends(end, nmic_end)
         aggregates(db,directory,end,stations=stations,ends=ends)
     timings['grid_aggregates'] = read_json(directory/'grid-status.json',{}).get('elapsed_seconds',0)
@@ -1040,7 +1067,7 @@ def _refresh(root, end, db):
         atomic_json(directory/'common-report.json',common)
     try:
         with phase('shenzhen_sanity',timings):
-            sanity = shenzhen_sanity(observations,root)
+            sanity = shenzhen_sanity(sanity_observations,root)
     except (OSError,KeyError,ValueError) as exc:
         sanity = dict(n=0,reason=str(exc))
     atomic_json(directory/'shenzhen-sanity.json',sanity)
@@ -1064,9 +1091,9 @@ def _refresh(root, end, db):
     journal = read_json(root/'ogimet-journal.json',{})
     basemap = read_json(ROOT / 'station-basemap.json')
     meta = dict(schema=1,version=VERSION,score_revision=guifan.REVISION,generated=iso(now()),window_end=iso(end),window_days=PAIR_DAYS,
-                nmic_end=nmic_end,window_ends={str(days):iso(value) for days,value in ends.items()},
+                nmic_end=nmic_end,cmagd_nmic_end=cmagd_nmic_end,window_ends={str(days):iso(value) for days,value in ends.items()},
                 stations=stations,sources=sources,models=model_coverage,**basemap,
-                stations_with_data=len({key[0] for key in observations}),
+                stations_with_data=stations_with_data,
                 unlocated_ogimet_ids=table.get('unknown_ogimet_ids',[]),
                 variables=[dict(id=k,label=v[0],unit=v[1],thresholds=THRESHOLDS.get(k,[]),**guifan.metadata(k,int(k[4:]) if k in THRESHOLDS else None)) for k,v in VARIABLES.items()],
                 station_counts=dict(synop=sum(s['type']=='synop' for s in stations),

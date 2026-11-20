@@ -61,8 +61,8 @@ window.StationVerification=(()=>{
  // Map viewport: zoom k (1 = whole box, max 40) around a centre, clamped to the box.
  const MAP_ZOOM_MAX=40;
  function mapFrame(meta,view){
-  const base=view?.base==='xj'&&meta.xj_bounds?'xj':null;
-  const [west,south,east,north]=base?meta.xj_bounds:meta.map_bounds||[104,18,121,27];
+  const base=view?.base==='cmagd'?'cmagd':view?.base==='xj'&&meta.xj_bounds?'xj':null;
+  const [west,south,east,north]=base==='cmagd'?(meta.cmagd_bounds||[93.64,16.60,126.34,42.88]):base?meta.xj_bounds:meta.map_bounds||[104,18,121,27];
   const k=Math.min(MAP_ZOOM_MAX,Math.max(1,Number(view?.k)||1)),w=(east-west)/k,h=(north-south)/k;
   const clamp=(v,lo,hi)=>Math.min(hi,Math.max(lo,v));
   const cx=clamp(Number.isFinite(view?.cx)?view.cx:(west+east)/2,west+w/2,east-w/2),cy=clamp(Number.isFinite(view?.cy)?view.cy:(south+north)/2,south+h/2,north-h/2);
@@ -109,6 +109,7 @@ window.StationVerification=(()=>{
   return {breaks:[-2,-.5,.5,2],colors:balance,note:'灰色接近 0，蓝色偏低，红色偏高'};
  }
  function mapView(meta,state,rows,modelLabel,view){
+  if(view?.base!=='cmagd')meta={...meta,stations:meta.stations.filter(s=>!s.cmagd_extended)};
   const scores=new Map(rows.map(r=>[r.station,r]));
   const f=mapFrame(meta,view),{west,south,east,north}=f,margin=.02*f.w;
   const boxStations=meta.stations.filter(s=>s.lon>=west-margin&&s.lon<=east+margin&&s.lat>=south-margin&&s.lat<=north+margin);
@@ -138,7 +139,7 @@ window.StationVerification=(()=>{
   // Zoomed into the Pearl River Delta: use the finer bundled lines there.
   const d=meta.detail_bounds,detail=f.k>=4&&d&&west>=d[0]&&south>=d[1]&&east<=d[2]&&north<=d[3];
   for(const [layer,style] of [['province_boundaries','stations-province'],['country_boundaries','stations-border'],['coastline','stations-coast']]){
-   for(const line of meta[detail?layer+'_detail':layer]||[])if(line.length>=2)svg+=`<path class="${style}" d="${line.map(([a,b],i)=>`${i?'L':'M'}${x(a).toFixed(1)} ${y(b).toFixed(1)}`).join('')}"/>`;
+   for(const line of meta[f.base==='cmagd'?layer+'_cmagd':detail?layer+'_detail':layer]||[])if(line.length>=2)svg+=`<path class="${style}" d="${line.map(([a,b],i)=>`${i?'L':'M'}${x(a).toFixed(1)} ${y(b).toFixed(1)}`).join('')}"/>`;
   }
   for(const line of meta.sz_district_boundaries||[])if(line.length>=2)svg+=`<path class="stations-sz-district" d="${line.map(([a,b],i)=>`${i?'L':'M'}${x(a).toFixed(1)} ${y(b).toFixed(1)}`).join('')}"/>`;
   svg+='</g>';
@@ -155,10 +156,10 @@ window.StationVerification=(()=>{
    if(f.k>=6||f.base)svg+=`<text class="stations-point-label" x="${(cx+r+3).toFixed(1)}" y="${(cy+4).toFixed(1)}">${esc(station.name)}</text>`;
    svg+='</g>';
   }
-  if(f.base)for(const mark of meta.xj_landmarks||[])svg+=`<g class="stations-landmark"><path d="M${x(mark.lon).toFixed(1)} ${(y(mark.lat)-7).toFixed(1)}l6 11h-12Z"/><text class="stations-point-label" x="${(x(mark.lon)+9).toFixed(1)}" y="${(y(mark.lat)+4).toFixed(1)}">${esc(mark.name)}</text></g>`;
+  if(f.base==='xj')for(const mark of meta.xj_landmarks||[])svg+=`<g class="stations-landmark"><path d="M${x(mark.lon).toFixed(1)} ${(y(mark.lat)-7).toFixed(1)}l6 11h-12Z"/><text class="stations-point-label" x="${(x(mark.lon)+9).toFixed(1)}" y="${(y(mark.lat)+4).toFixed(1)}">${esc(mark.name)}</text></g>`;
   svg+='</g></g>';
   svg+=`<text x="48" y="30">${esc(modelLabel)} · ${esc(regName)} ${esc(state.metric)}${state.verificationMode==='grade'?` ${meta.variables?.find(v=>v.id===state.var)?.grades?.find(g=>g.id===state.grade)?.label||state.grade}`:state.var.startsWith('rain')&&state.threshold!=null?`（≥${state.threshold} mm）`:''}${finite(regScore)?' '+metricNum(regScore,state.metric):''} · 有配对 ${regRows.length} 站${f.k>1?` · 放大 ${+f.k.toFixed(1)}×`:''}</text></svg>`;
-  return `${svg}<div class="stations-map-key"><span>● SYNOP　■ METAR　◆ 深圳各区格点插值　▲ |海拔差| &gt; 300 m</span><span class="stations-bins">${scale.colors.map((c,i)=>`<span><i style="background:${c}"></i>${i?(i<scale.breaks.length?`${metricNum(scale.breaks[i-1],state.metric)}–${metricNum(scale.breaks[i],state.metric)}`:`≥ ${metricNum(scale.breaks[i-1],state.metric)}`):`< ${metricNum(scale.breaks[0],state.metric)}`}</span>`).join('')}</span>${measured?`<span class="stations-measured">${esc(measured)} · ${esc(state.metric)}</span>`:''}<span>${scale.note}</span><span>小灰点：无有效指标</span>${state.var==='wind'&&String(state.model).includes('wn3')?'<span>WN3 风速：11-05 10:00（BJT）起报起为 64 成员风速平均，更早为平均 u、v 合成，偏小 4–20%</span>':''}<span>${f.base?'新疆站点单独评分，不计入南方地区':`站点评分范围：${meta.station_bounds?`${meta.station_bounds[0]}–${meta.station_bounds[2]}°E / ${meta.station_bounds[1]}–${meta.station_bounds[3]}°N`:''}`}</span></div>`;
+  return `${svg}<div class="stations-map-key"><span>● SYNOP　■ METAR　◆ 深圳各区格点插值　▲ |海拔差| &gt; 300 m</span><span class="stations-bins">${scale.colors.map((c,i)=>`<span><i style="background:${c}"></i>${i?(i<scale.breaks.length?`${metricNum(scale.breaks[i-1],state.metric)}–${metricNum(scale.breaks[i],state.metric)}`:`≥ ${metricNum(scale.breaks[i-1],state.metric)}`):`< ${metricNum(scale.breaks[0],state.metric)}`}</span>`).join('')}</span>${measured?`<span class="stations-measured">${esc(measured)} · ${esc(state.metric)}</span>`:''}<span>${scale.note}</span><span>小灰点：无有效指标</span>${state.var==='wind'&&String(state.model).includes('wn3')?'<span>WN3 风速：11-05 10:00（BJT）起报起为 64 成员风速平均，更早为平均 u、v 合成，偏小 4–20%</span>':''}<span>${f.base==='cmagd'?'CMA-GD 全域：93.64–126.34°E / 16.60–42.88°N':f.base==='xj'?'新疆站点单独评分，不计入南方地区':`站点评分范围：${meta.station_bounds?`${meta.station_bounds[0]}–${meta.station_bounds[2]}°E / ${meta.station_bounds[1]}–${meta.station_bounds[3]}°N`:''}`}</span></div>`;
  }
  function map(view){return mapView(meta,state,chooseRows(data.station_rows).filter(r=>r.model===state.model),label(state.model),view);}
  function niceAxis(rawMin,rawMax,metric){
@@ -402,9 +403,10 @@ window.StationVerification=(()=>{
  // Wheel zooms about the pointer, drag pans (no station click after a drag), buttons zoom/preset.
  // The view is remembered per key, so model/station changes keep the zoom.
  const mapViews=new Map();
- const MAP_PRESETS=[['南方地区',{k:1,region:'all'}],['新疆巴里坤',{k:1,base:'xj',region:'xj'}],['大湾区',{k:5,cx:113.6,cy:22.55,region:'gba'}],['香港',{k:20,cx:114.15,cy:22.37,region:'hk'}],['深圳',{k:18,cx:114.13,cy:22.65,region:'sz'}]];
- function mountMap(host,key,meta,draw,bind,onPreset){
-  let view=mapViews.get(key)||{k:1};
+ const MAP_PRESETS=[['南方地区',{k:1,region:'all'}],['CMA-GD 全域',{k:1,base:'cmagd',region:'cmagd'}],['新疆巴里坤',{k:1,base:'xj',region:'xj'}],['大湾区',{k:5,cx:113.6,cy:22.55,region:'gba'}],['香港',{k:20,cx:114.15,cy:22.37,region:'hk'}],['深圳',{k:18,cx:114.13,cy:22.65,region:'sz'}]];
+ function mountMap(host,key,meta,draw,bind,onPreset,region='all'){
+  key+=':'+region;
+  let view=mapViews.get(key)||{...(MAP_PRESETS.find(([,p])=>p.region===region)?.[1]||{k:1})};
   host.innerHTML=`<div class="stations-zoom-bar" role="group" aria-label="地图缩放"><button type="button" data-zoom="in" aria-label="放大">＋</button><button type="button" data-zoom="out" aria-label="缩小">－</button>${MAP_PRESETS.map(([name],i)=>`<button type="button" data-zoom-preset="${i}">${name}</button>`).join('')}<span class="stations-zoom-hint">滚轮缩放 · 拖动平移</span></div><div class="stations-zoom-canvas"></div>`;
   const canvas=host.querySelector('.stations-zoom-canvas');let dragged=false,frame=0;
   const paint=()=>{

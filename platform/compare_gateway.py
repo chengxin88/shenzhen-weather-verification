@@ -60,7 +60,7 @@ HOP_BY_HOP = {
 
 CSP = (
     "default-src 'self'; connect-src 'self' https://services.arcgisonline.com data: blob:; "
-    "img-src 'self' https://services.arcgisonline.com data: blob:; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' https://services.arcgisonline.com https://*.tianditu.gov.cn data: blob:; style-src 'self' 'unsafe-inline'; "
     "script-src 'self' blob: 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; "
     "frame-ancestors 'self'; form-action 'none'"
 )

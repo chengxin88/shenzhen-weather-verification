@@ -11,7 +11,7 @@ from pathlib import Path
 from cartopy.io.shapereader import Reader
 from shapely.geometry import box
 
-from station_common import BOX, ROOT, XJ_BOUNDS
+from station_common import BOX, ROOT, XJ_BOUNDS, CMAGD_BOX
 
 # Map, station selection and scoring share one extent, including the 27 N cap.
 MAP_BOX = BOX
@@ -40,6 +40,8 @@ def build(source):
                   xj_landmarks=[dict(name='巴里坤3风电场', lon=94.2, lat=44.4)])
     result.update(layers(source, box(*LINE_BOX), TOLERANCE))
     result.update({k + '_detail': v for k, v in layers(source, box(*DETAIL_BOX), DETAIL_TOLERANCE).items()})
+    result.update({k + '_cmagd': v for k, v in layers(source, box(*CMAGD_BOX), TOLERANCE).items()})
+    result['cmagd_bounds'] = list(CMAGD_BOX)
     return result
 
 

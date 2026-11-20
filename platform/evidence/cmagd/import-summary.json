@@ -1,0 +1,38 @@
+{
+  "expected_stations": 1917,
+  "core_expected": 260,
+  "outer_expected": 1657,
+  "stations": 1917,
+  "unique_reports": 184293,
+  "duplicates": 32392,
+  "conflicts": 2,
+  "conflict_examples": [
+    {
+      "station": "53926",
+      "time": "2026-11-12T12:00:00Z",
+      "winner": "S202611142255404467600.zip/S202611142255404467600.txt"
+    },
+    {
+      "station": "53926",
+      "time": "2026-11-15T06:00:00Z",
+      "winner": "S202611161126374521700.zip/S202611161126374521700.txt"
+    }
+  ],
+  "missing_metadata": [],
+  "outside_cmagd": [],
+  "baseline_conflicts": 0,
+  "first": "2026-11-03T03:00:00Z",
+  "last": "2026-11-16T03:00:00Z",
+  "sha256": "e02679b41ac1373f31b1ae1f1be9c7a13996319da917c234e1fcd250e6c2a5de",
+  "roundtrip": {
+    "files": 1,
+    "records": 184293,
+    "duplicates": 0,
+    "conflicts": 0
+  },
+  "coverage_distribution": {
+    "0": 9,
+    "1657": 95,
+    "5": 1
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "equal": true,
+  "mismatches": 0,
+  "errors": [],
+  "checked": {
+    "pairs": 76473,
+    "detail_stats": 872028,
+    "daily": 65006,
+    "scores-1.json": 510,
+    "station-scores-1.json": 136930,
+    "scores-3.json": 572,
+    "station-scores-3.json": 136946,
+    "scores-7.json": 572,
+    "station-scores-7.json": 136946,
+    "scores-15.json": 572,
+    "station-scores-15.json": 136946,
+    "grid-rows-t.json.gz": 34,
+    "grid-rows-rain6.json.gz": 168,
+    "grid-rows-rain12.json.gz": 154,
+    "grid-rows-rain24.json.gz": 120,
+    "grid-rows-msl.json.gz": 34,
+    "grid-rows-wind.json.gz": 34
+  },
+  "max_relative_error": 0.0,
+  "float_differences": {},
+  "old_stations": 438,
+  "extended_stations": 1556,
+  "new_pairs_by_model": {
+    "aifs": 43534,
+    "aigfs": 35757,
+    "ecmwf": 80853,
+    "gfs": 80853
+  },
+  "forbidden_new_pairs": 0,
+  "cmagd_nmic_majority": true,
+  "cmagd_window_end": "2026-11-05T06:00:00Z",
+  "tolerance": "计数精确相等；配对全部列精确相等；连续汇总相对误差 <= 1e-9（无绝对误差豁免）",
+  "api_checks": true
+}

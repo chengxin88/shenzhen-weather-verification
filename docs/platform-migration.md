@@ -42,3 +42,7 @@ Open-Meteo 的三个链接目标已复制成真实文件，避免仓库只包含
 ## 2026-11-16 同步
 
 平台 11 月初从笔记本 WSL 搬到 Spark 服务器，`platform/` 这次按 Spark `verification-platform/verification-test` 本地仓库提交 `237efc5`（分支 `spark`）整体同步，随后补上 `f4538d8`（Python 测试跟上近 15 天、站点范围扩大和菜单调整），清单见 `platform-source-manifest.json`。和 11-02 相比新增：国家站（中国气象数据网）资料接入和站点坐标修正、湖南及华南区域、考核总览页、短时预报检验页、个例检验页改版、规范评分、台风检验（含 Pangu 路径）、高空环流、站点评分汇总提速（按日增量汇总）、页面日期窗口改为近 3/7/15 天、站点配对只保留 16 天，以及各项对应的测试、任务书和报告（`evidence/` 为验收截图和数据，测试日志 `*.log` 按仓库忽略规则不纳入）。`openmeteo_ecmwf.py`、`openmeteo_regional.py` 在 Spark 上是指向共用目录的链接，这里放的是实际内容。`.env.example`、`README.md`、`requirements.txt` 保持不变；运行数据、缓存和本地凭据（`deploy/env`、`.streamlit/secrets.toml`）仍不纳入。
+
+## 2026-11-20 同步
+
+`platform/` 按 Spark `verification-platform/verification-test` 本地仓库提交 `a0793c2`（分支 `spark`）整体同步，清单见 `platform-source-manifest.json`。和 11-16 相比新增：站点检验范围扩到 CMA-GD 全域（新增约 1556 个国家站，暂只评 EC、GFS、AIFS、AIGFS 四个模式；新增区域「CMA-GD 全域」，原有区域结果逐值不变）及其任务书、报告、验收证据和工具（`TASK_CMAGD.md`、`REPORT_CMAGD.md`、`evidence/cmagd/`、`tools/*cmagd*`）；考核总览降水 TS 增加「分级/累加」检验切换；侧栏关联平台增加巴里坤风电预报检验入口。`TASK_CMAGD.md` 里一处服务器内网直连地址在本仓库副本中略去，因此该文件与源仓库有一行不同，清单里记的是本仓库副本的校验值。`.env.example`、`README.md`、`requirements.txt` 保持不变；运行数据、缓存和本地凭据仍不纳入。
