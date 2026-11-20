@@ -93,7 +93,7 @@ for(const saved of Object.values(preferences.datasets)){
   delete saved.start;delete saved.end;delete saved.valid;delete saved.view;delete saved.scoreScope;
   delete saved.leadMode;delete saved.leadGroup;delete saved.timeCommon;
 }
-let stationRegionLabels={all:'南方地区',hn:'华南地区',hun:'湖南地区',gba:'粤港澳大湾区',hk:'香港',sz:'深圳',xj:'新疆巴里坤'};
+let stationRegionLabels={all:'南方地区',cmagd:'CMA-GD 全域',hn:'华南地区',hun:'湖南地区',gba:'粤港澳大湾区',hk:'香港',sz:'深圳',xj:'新疆巴里坤'};
 
 const currentGroup=()=>GROUPS.find(g=>g.id===groupId)||GROUPS[0];
 const stationDataset=()=>ds?.source==='station';
@@ -208,8 +208,9 @@ function renderNav(){
 
 /* ---------- date / controls ---------- */
 function stationWindow(dataset=ds){
-  if(dataset?.source!=='station'||!dataset.region_nmic_majority?.[stationRegion]||!dataset.nmic_end||!dataset.window_end)return null;
-  const end=Math.min(Date.parse(dataset.window_end),Date.parse(dataset.nmic_end));
+  const nmicEnd=stationRegion==='cmagd'?(dataset?.cmagd_nmic_end||dataset?.nmic_end):dataset?.nmic_end;
+  if(dataset?.source!=='station'||!dataset.region_nmic_majority?.[stationRegion]||!nmicEnd||!dataset.window_end)return null;
+  const end=Math.min(Date.parse(dataset.window_end),Date.parse(nmicEnd));
   if(!Number.isFinite(end)||end>=Date.parse(dataset.window_end))return null;
   return new Date(end+8*3600000).toISOString().slice(0,10);
 }
@@ -303,6 +304,7 @@ function renderFilter(){
     select.value=String(stateLead);
   }
   $('filter-note').textContent=`${currentGroup().label} · ${scopeLabel()} · ${$('start').value} — ${$('end').value} BJT · ${hourLabel()}${rain&&needsThreshold()&&chartMode!=='threshold'?` · ≥${thresholdValue()} mm`:''}${ds.reference?` · ${stationDataset()?'站点实况':ds.reference}`:''}`;
+  if(cmagdScope())$('filter-note').append(document.createElement('br'),'这个区域里新加的国家站只评 EC 0.25°、GFS、ECAI、GFSAI 四个模式。');
   if(stationWindowNote())$('filter-note').append(document.createElement('br'),stationWindowNote());
 }
 
@@ -513,7 +515,7 @@ function availableRowsForModels(){
 /* ---------- model chips ---------- */
 function modelControls(availableRows=null){
   if(!ds)return;
-  const models=numericFirst([...(ds.supported_models||ds.models)]);
+  const models=numericFirst([...(ds.supported_models||ds.models)]).filter(m=>!cmagdScope()||cmagdModels.has(m));
   const buttons=models.map(m=>{
     const b=document.createElement('button');b.type='button';b.className='model-chip';b.dataset.model=m;
     const archived=ds.models.includes(m),available=archived&&(availableRows===null||availableRows.some(r=>r.model===m)),demo=window.DemoModels.profile(m);
@@ -558,7 +560,9 @@ function chartRows(){
   const xKey=chartMode==='date'?'valid':chartMode==='threshold'?'threshold':'lead';
   return {raw,xKey,data:withDemoIdentity(C.grouped(raw,['model',xKey]),raw)};
 }
-function activeModels(){return [...selected];}
+const cmagdModels=new Set(['ECMWF-IFS','NCEP-GFS','ECAI','GFSAI']);
+const cmagdScope=()=>stationDataset()&&stationRegion==='cmagd';
+function activeModels(){return [...selected].filter(m=>!cmagdScope()||cmagdModels.has(m));}
 // Regular lead ticks: the accumulation step (3 h for instantaneous elements) up to 72 h,
 // then the same step but never finer than 6 h, so 6 h and 12 h rain keep their spacing all
 // the way. One tick per day beyond 72 h always landed on the same clock hours and missed
@@ -570,7 +574,7 @@ function regionControls(){
   $('region-field').hidden=!show;$('station-field').hidden=!show;
   if(!show)return;
   stationPickSync();ensureStationSites();
-  $('region-switch').replaceChildren(...['all','hn','hun','gba','sz','hk','xj'].map(region=>{
+  $('region-switch').replaceChildren(...['all','cmagd','hn','hun','gba','sz','hk','xj'].map(region=>{
     const b=document.createElement('button');b.type='button';b.dataset.region=region;
     b.textContent=stationRegionLabels[region];
     b.setAttribute('aria-pressed',String(!scoreStation&&stationRegion===region));
@@ -963,6 +967,7 @@ function render(opts={}){
     const roster=new Set(available.map(r=>r.model));
     selected=new Set(defaultModels(ds,roster));
   }
+  if(cmagdScope()&&!activeModels().length)selected=new Set(ds.models.filter(m=>cmagdModels.has(m)));
   modelControls(available);
   renderFilter();
   $('chart-mode-toggle').hidden=isPerformance;
@@ -1057,7 +1062,7 @@ function stationSelection(){
     metric:metricKey==='performance'?'TS':metricKey,threshold:kind==='降水'?thresholdValue():null,lead:stateLead,reference:gridReference,page,region:stationRegion};
 }
 async function setStationScope(region,site=null){
-  const next=['all','hn','hun','gba','hk','sz','xj'].includes(region)?region:'all';
+  const next=['all','cmagd','hn','hun','gba','hk','sz','xj'].includes(region)?region:'all';
   if(!stationDataset()||!ds)return;
   if(next===stationRegion&&(site?.id||'')===(scoreStation?.id||'')&&rowsReadyId===ds.id){render({skipStationEvent:true});return;}
   const previousEnd=stationWindow();
@@ -1316,7 +1321,7 @@ async function openOverviewDetail(hash){
   const group=element==='rain'?'降水':'气温';
   await openGroup(group,element==='rain'?'TS':'ACC2');
   if(!current()||!stationDataset())return;
-  page='metric';chartMode='lead';stationRegion='all';scoreStation=null;
+  page='metric';chartMode='lead';stationRegion=Object.hasOwn(stationRegionLabels,params.get('region'))?params.get('region'):'all';scoreStation=null;
   stateLead=day*24;$('lead').value=String(stateLead);
   setDates(Number(days));datePreset=Number(days);
   render();

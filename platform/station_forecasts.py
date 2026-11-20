@@ -22,7 +22,7 @@ import time
 import zipfile
 import zlib
 import numpy as np
-from station_common import BOX, ROOT, RUN_DAYS, UTC, VERSION, atomic_json, digest, iso, read_json, stamp, sync_directory
+from station_common import BOX, ROOT, RUN_DAYS, UTC, VERSION, atomic_json, digest, iso, read_json, stamp, sync_directory, model_allowed
 
 WEATHER = Path(os.environ.get('STATIONS_WEATHER_ROOT', '/home/yjzx/verification-platform/gods-eye-weather/weather-data'))
 PRODUCTION = Path(os.environ.get('STATIONS_NATIVE_ROOT', '/home/yjzx/verification-platform/verification-test'))
@@ -208,7 +208,10 @@ def read_native_frame(path, slug, run, lead, targets, metadata=None):
             file = directory / (name + '.npy')
             if not file.is_file():
                 return None
-            array = np.load(str(file), mmap_mode='r', allow_pickle=False)
+            # DrvFS/USB mmap faults grow with the number of scattered stations.
+            # A regional field is only 340 KiB (global: 4 MiB); one sequential
+            # read per field is bounded by the existing eight sampling workers.
+            array = np.load(str(file), allow_pickle=False)
             if array.dtype != np.float32 or array.shape != (len(y), len(x)):
                 raise ValueError('Native station field shape/dtype mismatch')
             return array
@@ -413,6 +416,19 @@ class SamplePlan(Mapping):
         return self.loader(needed) if needed else {}
 
 
+def station_targets(stations, model):
+    """Subset BEFORE interpolation; scatter back to the certified roster layout."""
+    indices = [i for i, s in enumerate(stations) if model_allowed(s, model)]
+    target = [(stations[i]['lon'], stations[i]['lat']) for i in indices]
+    def expand(array):
+        if len(indices) == len(stations):
+            return array
+        out = np.full(len(stations), np.nan)
+        out[indices] = array
+        return out
+    return target, expand
+
+
 def forecast_runs(root, stations, end, lazy=False, timings=None):
     """Discover source identities first; sample only a run that needs pairing.
 
@@ -441,7 +457,9 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
     destinations = {tuple(point): i for i, point in enumerate(points)}
 
     def remapping(state):
-        source = layouts.get(state.get('station_signature'))
+        source = layouts.get(state.get('station_signature')) or state.get('points')
+        if source and digest(source) != state.get('station_signature'):
+            return None
         if state.get('station_signature') == station_sig or not source:
             return None
         if not all(tuple(point) in destinations for point in source):
@@ -546,6 +564,7 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
     if timings is not None:timings['discover'] = discovered
     print('TIMING discover',round(discovered,3),'seconds',flush=True)
     for (slug, run_text), paths in sorted(groups.items()):
+        target, expand = station_targets(stations, slug)
         run = stamp(run_text); key = slug+'_'+run.strftime('%Y%m%d%H')
         file = out / (key+'.npz'); issues = []; metadata = {}; signatures = []
         certified, embedded = sample_state(file,out/(key+'.certified.json'))
@@ -606,7 +625,9 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
         leads = {h for h in metadata.keys() | retained if active(h)}
         if not leads and not any(active(h) for h in paths):continue
         def sample_one(lead):
-            try:return lead,read_native_frame(paths[lead],slug,run,lead,target,metadata[lead]),[]
+            try:
+                values = read_native_frame(paths[lead],slug,run,lead,target,metadata[lead])
+                return lead,{k: v if k == 'rain_start' else expand(v) for k,v in values.items()},[]
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 return lead,{},[[slug,run_text,lead,str(exc)]]
         # Plans are consumed before advancing this generator; closures therefore
@@ -623,6 +644,7 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
     point_runs = {p.name.split('_')[1].split('.')[0]: p for p in out.glob('ec01_??????????.nmic.npz')}
     seen_ec01 = set()
     reg = regional()
+    target, expand = station_targets(stations, 'ec01')
     for directory in sorted(reg.root().iterdir()) if reg.root().is_dir() else []:
         if not re.fullmatch(r'\d{10}',directory.name) or not (directory/'run.json').is_file():continue
         run = datetime.strptime(directory.name,'%Y%m%d%H').replace(tzinfo=UTC)
@@ -681,13 +703,13 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
                                         if dest is not None:expanded[dest] = array[i]
                                 ev[name] = expanded
                     for eh,ev in ext_values.items():
-                        if eh not in old and len(ev.get('t',()))==len(target) and (not ext_state or
+                        if eh not in old and len(ev.get('t',()))==len(stations) and (not ext_state or
                                 ext_state.get('station_signature') == station_sig or remapping(ext_state) is not None):old[eh]=ev
                 missing=(needed-old.keys())&set(manifest['leads'])
                 print('SAMPLES',key,len(needed),'loaded_leads',len(missing),'sampled_leads',flush=True)
                 if missing:
                     with ThreadPoolExecutor(max_workers=len(names)) as pool:
-                        series=dict(zip(names,pool.map(lambda name:regional_series(reg,directory.name,manifest,name,missing,target,nearest=name=='precipitation'),names)))
+                        series=dict(zip(names,pool.map(lambda name:{h:expand(v) for h,v in regional_series(reg,directory.name,manifest,name,missing,target,nearest=name=='precipitation').items()},names)))
                     for lead in sorted(missing):
                         values=dict(t=series['temperature_2m'][lead],td=series['dew_point_2m'][lead],msl=series['pressure_msl'][lead],
                                     wind=np.hypot(series['wind_u_component_10m'][lead],series['wind_v_component_10m'][lead]))
@@ -723,6 +745,7 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
         samples = SamplePlan(active,sig,lambda needed,p=point_file:read_points(p,stations,needed))
         yield 'ec01',run,samples if lazy else samples.load(set(samples)),sig,[]
 
+    target, expand = station_targets(stations, 'wn3')
     na=native();wnroot=WEATHER/'region-v4/weathernext3'
     for path in sorted(union_glob(wnroot,'run_??????????.json')):
         issues=[]
@@ -759,7 +782,7 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
                         x,y,array=na.load_wn3_field(speed,run,lead,'surface_ws',directory)
                         values['wind']=interpolate(array,x,y,target)
                     except na.WN3_ERRORS as exc:errors.append(['wn3',iso(run),lead,str(exc)])
-                    return lead,values,errors
+                    return lead,{k:v if k=='rain_start' else expand(v) for k,v in values.items()},errors
                 u_source=read_path(wnroot/directory/run.strftime('%Y%m%d%H')/f'f{lead:03}_surface_u.npz')
                 v_source=read_path(wnroot/directory/run.strftime('%Y%m%d%H')/f'f{lead:03}_surface_v.npz')
                 if u_source.is_file() and v_source.is_file():
@@ -768,7 +791,7 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
                         vx,vy,v_arr=na.load_wn3_field(v_source,run,lead,'surface_v',directory)
                         values['wind']=np.hypot(interpolate(u_arr,ux,uy,target),interpolate(v_arr,vx,vy,target))
                     except na.WN3_ERRORS as exc:errors.append(['wn3',iso(run),lead,str(exc)])
-                return lead,values,errors
+                return lead,{k:v if k=='rain_start' else expand(v) for k,v in values.items()},errors
             old_state,_ = sample_state(out/(key+'.npz'),out/(key+'.sample-state.json'))
             layout_reuse = active if outside_added_points(old_state,na.WN3_SOURCES[directory][1]) else ()
             samples = plan(key,active,sig,legacy_sig,per_lead,sample_one,issues,layout_reuse=layout_reuse)
@@ -785,7 +808,7 @@ def forecast_runs(root, stations, end, lazy=False, timings=None):
         with np.load(path,allow_pickle=False) as data:
             ids = [str(v) for v in data['ids']]; leads = [int(v) for v in data['leads']]
             fields = {k:data[k] for k in data.files if k in ('t','td','msl','wind','rain')}
-        slots = [(index[v],j) for j,v in enumerate(ids) if v in index]
+        slots = [(index[v],j) for j,v in enumerate(ids) if v in index and model_allowed(stations[index[v]], job)]
         if not slots:continue
         samples = {}
         for k,lead in enumerate(leads):

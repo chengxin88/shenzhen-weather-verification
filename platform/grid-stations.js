@@ -14,7 +14,7 @@
  const choices=()=>selection.models?.length?selection.models:[{model:selection.model,label:selection.modelLabel,color:V.colors[modelId(selection.model)]}];
  const chosen=()=>choices().find(m=>m.model===mapModel)||choices()[0];
  const OBS='__obs',hidden=new Set();
- const runCaption=s=>s.hour&&s.hour!=='all'?`${s.hour}时起报（北京时间）`:'全部起报时次';
+ const runCaption=s=>s.hour&&s.hour!=='all'?`${s.hour}:00 起报（北京时间）`:'全部起报时次';
  function shell(){
   host.innerHTML='<section class="results stations-map-card"><div class="result-heading"><div><h2>站点分布图</h2><p id="grid-station-caption"></p></div><div class="grid-station-head-tools"><div id="grid-station-model" class="model-chips" role="group" aria-label="地图模式"></div><label class="grid-station-lead">单站时效<select id="grid-station-lead"></select></label><button type="button" id="grid-station-reset" class="quiet" hidden>返回区域</button></div></div><div id="grid-station-map" aria-live="polite"></div><p id="grid-station-map-note" class="stations-note"></p></section><section class="results grid-station-detail"><div class="result-heading"><h2>单站预报与实况</h2></div><div id="grid-station-detail-body" aria-live="polite"></div></section>';
  }
@@ -39,7 +39,7 @@
     window.GridVerification.setStationRegion(region);
     updateScopeNote();
    }
-  });
+  },selection.region);
  }
  async function loadMap(current,signal){
   const s=selection,m=chosen(),th=s.metric==='PC'?.1:Number(s.threshold??.1);
@@ -48,7 +48,7 @@
   if(signal.aborted||current!==sequence)return;
   rows=data.rows;
   by('grid-station-caption').textContent=`${m.label} · ${s.start} — ${s.end} BJT · ${runCaption(s)}${s.leads.length<=3?` · ${s.leads.map(lead=>'+'+lead).join('/')}小时`:''}${s.variable.startsWith('rain')?` · ≥${th} mm`:''}`;
-  mapSample=(data.sample||'')+(metadata.update_notice?' '+metadata.update_notice:'')+(window.DemoModels.profile(m.model)?' 当前为 WN3 演示资料，共用 WN3 站点配对，不计入正式排名。':'');
+  mapSample=(s.region==='cmagd'?'这个区域里新加的国家站只评 EC 0.25°、GFS、ECAI、GFSAI 四个模式。 ':'')+(data.sample||'')+(metadata.update_notice?' '+metadata.update_notice:'')+(window.DemoModels.profile(m.model)?' 当前为 WN3 演示资料，共用 WN3 站点配对，不计入正式排名。':'');
   drawMap();
  }
  let detailSequence=0,detail=null;

@@ -1,0 +1,32 @@
+{
+  "processed_runs": 83,
+  "unchanged_runs": 0,
+  "inserted_pairs": 60,
+  "total_pairs": 60,
+  "issues": 0,
+  "generation": "20261116T041537057385",
+  "full_runs": 83,
+  "partial_runs": 0,
+  "changed_valids": 6513,
+  "timings": {
+    "observations": 0.332,
+    "rolloff": 0.015,
+    "discover": 0.074,
+    "forecast.gfs": 0.484,
+    "score.gfs": 0.267,
+    "forecast.ec01": 6.8,
+    "score.ec01": 5.34,
+    "aggregates": 1.36,
+    "grid_aggregates": 0.248,
+    "window_aggregates": 1.112,
+    "common_report": 0.019,
+    "shenzhen_sanity": 0.558,
+    "export_days": 0.641,
+    "coverage": 0.068,
+    "backup": 0.103,
+    "publish": 0.316
+  },
+  "elapsed_seconds": 16.686,
+  "wall_seconds": 16.749777696008096,
+  "peak_rss_mib": 185.3515625
+}

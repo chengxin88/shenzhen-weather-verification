@@ -19,7 +19,7 @@ import time
 import numpy as np
 import guifan_scores as guifan
 from station_common import (DAY_WINDOWS, GRID_DATASETS, GRID_MODELS, GRID_THRESHOLDS,
-                            THRESHOLDS, XINJIANG, iso, stamp)
+                            THRESHOLDS, XINJIANG, iso, stamp, legacy_exclusions)
 
 RANGES = ((0,240),(0,24),(25,72),(73,168),(169,240))
 COLUMNS = 9+3*len(GRID_THRESHOLDS)+len(guifan.COLUMNS)
@@ -42,7 +42,7 @@ def native():
 def _native():
     source=Path(__file__).with_name('station_aggregate_native.c')
     key=hashlib.sha256(source.read_bytes()+os.uname().machine.encode()).hexdigest()[:20]
-    directory=Path('/tmp')/('station-aggregate-'+str(os.getuid()))
+    directory=Path(os.environ.get('STATIONS_AGG_NATIVE_CACHE',str(Path('/tmp')/('station-aggregate-'+str(os.getuid())))))
     directory.mkdir(mode=0o700,exist_ok=True)
     if directory.stat().st_uid!=os.getuid() or directory.stat().st_mode & 0o022:
         raise Unavailable('native cache directory is not private')
@@ -147,6 +147,7 @@ def batches(cursor):
 
 
 def windows(db,end,variable=None):
+    excluded=legacy_exclusions(db)
     groups=Groups(len(DAY_WINDOWS));started=time.monotonic();count=0
     try:
         # Explicit order matches the original covering pair_valid index, including
@@ -162,7 +163,7 @@ def windows(db,end,variable=None):
             for i,(st,m,v,h,at,*_) in enumerate(rows):
                 ids[i,0]=groups.index(('detail',st,m,v,h))
                 if v not in THRESHOLDS:
-                    if st not in XINJIANG: ids[i,1]=groups.index(('lead',m,v,h))
+                    if st not in excluded: ids[i,1]=groups.index(('lead',m,v,h))
                     if 0<=h<=240:
                         ids[i,2]=groups.index(('station',st,m,v,0,240))
                         lo,hi=next((lo,hi) for lo,hi in RANGES[1:] if lo<=h<=hi)
@@ -235,6 +236,7 @@ class GridRows:
 
 
 def grid(db,context=None):
+    excluded=legacy_exclusions(db)
     groups=Groups(1);started=time.monotonic();count=0;previous=None
     result=GridRows(db)
     cache=None;expected_valid={}
@@ -307,7 +309,7 @@ def grid(db,context=None):
                 previous=day;part=rows[start:stop]
                 ids=np.full((len(part),2),-1,dtype=np.int64)
                 for i,(st,m,v,h,at,fc,ob,tr,run) in enumerate(part):
-                    if st not in XINJIANG: ids[i,0]=groups.index(('space',m,run,h,at,v))
+                    if st not in excluded: ids[i,0]=groups.index(('space',m,run,h,at,v))
                     ids[i,1]=groups.index(('daily',m,v,day,h,st))
                 groups.add(ids,np.ones(len(part),dtype=np.uint8),inputs(part),part);count+=len(part);start=stop
         flush();groups.close()

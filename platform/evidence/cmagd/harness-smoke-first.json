@@ -1,0 +1,36 @@
+{
+  "equal": true,
+  "mismatches": 0,
+  "errors": [],
+  "checked": {
+    "pairs": 56,
+    "detail_stats": 224,
+    "daily": 42,
+    "scores-1.json": 56,
+    "station-scores-1.json": 16,
+    "scores-3.json": 56,
+    "station-scores-3.json": 16,
+    "scores-7.json": 56,
+    "station-scores-7.json": 16,
+    "scores-15.json": 56,
+    "station-scores-15.json": 16,
+    "grid-rows-t.json.gz": 14,
+    "grid-rows-rain6.json.gz": 0,
+    "grid-rows-rain12.json.gz": 0,
+    "grid-rows-rain24.json.gz": 0,
+    "grid-rows-msl.json.gz": 14,
+    "grid-rows-wind.json.gz": 14
+  },
+  "max_relative_error": 0.0,
+  "float_differences": {},
+  "old_stations": 1,
+  "extended_stations": 1,
+  "new_pairs_by_model": {
+    "gfs": 4
+  },
+  "forbidden_new_pairs": 0,
+  "cmagd_nmic_majority": true,
+  "cmagd_window_end": "2026-11-05T06:00:00Z",
+  "tolerance": "计数精确相等；配对全部列精确相等；连续汇总相对误差 <= 1e-9（无绝对误差豁免）",
+  "api_checks": true
+}

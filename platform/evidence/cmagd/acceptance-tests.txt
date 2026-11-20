@@ -1,0 +1,7 @@
+命令：python -m unittest test_cmagd test_nmic test_region_hunan test_station_return test_aggregate_fast test_rescore_diff test_station_discover test_nmic_window
+解释器：~/.venvs/ec-gfs-server/bin/python；TMPDIR / SQLITE_TMPDIR 均在 E 盘
+.........
+----------------------------------------------------------------------
+Ran 73 tests in 180.946s
+
+OK

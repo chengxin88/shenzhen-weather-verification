@@ -14,7 +14,7 @@ import time
 import numpy as np
 import station_aggregate as kernel
 from station_common import (DAY_WINDOWS, GRID_DATASETS, GRID_MODELS, THRESHOLDS,
-                            VARIABLES, XINJIANG, iso, stamp)
+                            VARIABLES, XINJIANG, iso, stamp, legacy_exclusions)
 
 SCHEMA = 'daily-compensated-v8'   # v8：各窗口可有各自的截止时刻（metadata 多存 ends）
 CHUNK = 131072
@@ -73,6 +73,7 @@ def difference(a,b):
 class Daily:
     pooled=True
     def __init__(self, db, end, context):
+        self.excluded=legacy_exclusions(db)
         self.db=db;self.end=end;self.context=context;self.cache=None;self.current=None
         self.ends=window_ends(context.get('ends') or end)
         if sqlite3.sqlite_version_info<(3,42,0): raise kernel.Unavailable('daily states require compensated SQLite SUM (>=3.42)')
@@ -283,7 +284,7 @@ class Daily:
                         ids[i,0]=groups.index(('day',day,st,m,v,h,''));column=3
                         if v in GRID_DATASETS and m in GRID_MODELS:
                             if bj!=day: ids[i,1]=groups.index(('daily',day,st,m,v,h,bj))
-                            if st not in XINJIANG: ids[i,2]=groups.index(('space',day,run,m,v,h,at))
+                            if st not in self.excluded: ids[i,2]=groups.index(('space',day,run,m,v,h,at))
                         for key,a,b in active_edges:
                             if a<=at<b: ids[i,column]=groups.index(('edge',key,st,m,v,h,''))
                             column+=1
@@ -307,8 +308,8 @@ class Daily:
                            'PRIMARY KEY(station,model,var,lead)) WITHOUT ROWID')
         self.cache.execute("INSERT INTO win SELECT station,model,var,lead,value FROM states WHERE kind='window' AND part=? ORDER BY station,model,var,lead",(str(window),))
         self.cache.execute('CREATE TEMP TABLE pool_lead (model TEXT,var TEXT,lead INTEGER,value BLOB,PRIMARY KEY(model,var,lead)) WITHOUT ROWID')
-        excluded=','.join('?' for _ in XINJIANG)
-        self.cache.execute('INSERT INTO pool_lead SELECT model,var,lead,agg_total(value) FROM win WHERE station NOT IN ('+excluded+') GROUP BY model,var,lead',tuple(XINJIANG))
+        excluded=','.join('?' for _ in self.excluded)
+        self.cache.execute('INSERT INTO pool_lead SELECT model,var,lead,agg_total(value) FROM win WHERE station NOT IN ('+excluded+') GROUP BY model,var,lead',tuple(self.excluded))
         self.cache.execute('CREATE TEMP TABLE pool_station (station TEXT,model TEXT,var TEXT,lo INTEGER,hi INTEGER,value BLOB,PRIMARY KEY(station,model,var,lo,hi)) WITHOUT ROWID')
         for lo,hi in kernel.RANGES:
             self.cache.execute('INSERT INTO pool_station SELECT station,model,var,?,?,agg_total(value) FROM win WHERE lead>=? AND lead<=? GROUP BY station,model,var',(lo,hi,lo,hi))

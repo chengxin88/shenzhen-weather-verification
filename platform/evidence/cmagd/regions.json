@@ -1,0 +1,48 @@
+{
+  "before": 438,
+  "after": 1994,
+  "extended": 1556,
+  "nmic": 1917,
+  "regions": {
+    "all": {
+      "before": 438,
+      "after": 438,
+      "nmic_majority": false
+    },
+    "cmagd": {
+      "before": 435,
+      "after": 1991,
+      "nmic_majority": true
+    },
+    "hn": {
+      "before": 205,
+      "after": 205,
+      "nmic_majority": true
+    },
+    "hun": {
+      "before": 84,
+      "after": 84,
+      "nmic_majority": true
+    },
+    "gba": {
+      "before": 47,
+      "after": 47,
+      "nmic_majority": true
+    },
+    "hk": {
+      "before": 7,
+      "after": 7,
+      "nmic_majority": false
+    },
+    "sz": {
+      "before": 12,
+      "after": 12,
+      "nmic_majority": false
+    },
+    "xj": {
+      "before": 3,
+      "after": 3,
+      "nmic_majority": false
+    }
+  }
+}

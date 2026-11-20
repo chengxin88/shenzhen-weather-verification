@@ -99,6 +99,22 @@ class Overview(unittest.TestCase):
         self.assertEqual(result['rows'][0]['grades'][0]['A']+result['rows'][0]['grades'][0]['C'],0)
         self.assertEqual(self.request(day=2)['rows'][0]['n'],1)
 
+    def test_cumulative_thresholds(self):
+        # 2026-11-18 累加检验：预报、实况都达到量级算报对。
+        result = self.request()
+        row = result["rows"][0]
+        self.assertEqual([(c["threshold"],c["A"],c["B"],c["C"]) for c in row["cumulative"][:3]],
+                         [(.1,1,1,0),(10,0,1,0),(25,0,0,0)])
+        self.assertEqual(row["cumulative"][0]["TS"],.5)
+        self.assertEqual(row["cumulative"][1]["TS"],0)
+        self.assertIsNone(row["cumulative"][2]["TS"])
+        self.assertEqual([g["observed_cumulative"] for g in result["grades"]],[1,0,0,0])
+        self.assertEqual([g["threshold"] for g in result["grades"]],[.1,10,25,50])
+        # 现算路径（没有评分文件）结果相同。
+        for path in self.directory.glob("scores-*.json"): path.unlink()
+        api.overview_cached.cache_clear(); api.cached_json.cache_clear()
+        self.assertEqual(self.request()["rows"][0]["cumulative"],row["cumulative"])
+
     def test_extreme_columns_observed_and_forecast_even_underforecast(self):
         self.make_snapshot('20261109T000001',extreme=True)
         self.assertEqual([g['id'] for g in self.request(day=1)['grades']],[1,2,3,4])

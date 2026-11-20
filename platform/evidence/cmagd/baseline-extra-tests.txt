@@ -1,0 +1,5 @@
+基线 602f40e 上额外执行的两个原有失败，与本次扩域无关：
+ERROR: test_single_pass_preserves_pooled_cc_and_every_contingency_threshold (test_station_incremental.AggregateEquivalenceTests.test_single_pass_preserves_pooled_cc_and_every_contingency_threshold)
+FAIL: test_pruning_protects_current_even_after_rollback_and_ignores_incomplete (test_station_incremental.PublicationRecoveryTests.test_pruning_protects_current_even_after_rollback_and_ignores_incomplete)
+Ran 2 tests in 2.659s
+FAILED (failures=1, errors=1)

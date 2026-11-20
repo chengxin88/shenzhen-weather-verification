@@ -1,0 +1,50 @@
+[
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/prepared",
+    "bytes": 23366405,
+    "MiB": 22.28,
+    "why": "主管上线时需放入的全域 TXT 与覆盖诊断"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/input",
+    "bytes": 5093657,
+    "MiB": 4.86,
+    "why": "只读拉取的旧站表、元数据、核心 TXT 和正式轮测量"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/frames",
+    "bytes": 81602797,
+    "MiB": 77.82,
+    "why": "34 帧真实预报输入，保留给主管复查样本等价"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/obs",
+    "bytes": 276765,
+    "MiB": 0.26,
+    "why": "两日真实实况输入，配合预报帧复查"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/baseline-code",
+    "bytes": 7091454,
+    "MiB": 6.76,
+    "why": "602f40e 纯代码归档，供复现旧版本"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/cmagd-commits.git",
+    "bytes": 3592935,
+    "MiB": 3.43,
+    "why": "因本目录 .git 只读而建立的可写提交库"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/expanded-stations.json",
+    "bytes": 513645,
+    "MiB": 0.49,
+    "why": "容量枚举的实际扩展站名单"
+  },
+  {
+    "path": "/mnt/e/vt-cmagd-scratch/logs",
+    "bytes": 328153,
+    "MiB": 0.31,
+    "why": "最终测试、重放与审计日志"
+  }
+]

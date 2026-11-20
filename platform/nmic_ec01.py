@@ -12,7 +12,7 @@ import os
 
 import numpy as np
 import requests
-from station_common import UTC, atomic_json, cache_root, digest, iso, read_json, stamp
+from station_common import UTC, atomic_json, cache_root, digest, iso, read_json, stamp, model_allowed
 
 SCHEMA = 'nmic-ec01-points-v1'
 FIELDS = {'t': 'temperature_2m', 'td': 'dew_point_2m', 'msl': 'pressure_msl',
@@ -68,7 +68,7 @@ def read_points(path, stations, wanted=None):
     if state.get('schema') != SCHEMA:
         raise ValueError('Invalid EC01 point supplement certificate')
     points = state['points']; target = {(s['id'], s['lon'], s['lat']): i for i, s in enumerate(stations)}
-    mapping = [(i, target[tuple(p)]) for i, p in enumerate(points) if tuple(p) in target]
+    mapping = [(i, target[tuple(p)]) for i, p in enumerate(points) if tuple(p) in target and model_allowed(stations[target[tuple(p)]], 'ec01')]
     result = load_samples(path, wanted)
     for values in result.values():
         for key, array in list(values.items()):
@@ -110,6 +110,11 @@ def supplement_path(root, ident):
     return root / 'forecast' / f'ec01_{ident}.nmic.npz'
 
 
+def request_stations(stations):
+    return [s for s in stations if 'nmic' in s.get('sources', []) and
+            not s.get('nmic_cmagd_metadata_only') and model_allowed(s, 'ec01')]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--start', required=True, type=stamp, help='First run, UTC')
@@ -123,7 +128,7 @@ def main():
     import nmic_obs
     table = read_json(root / 'stations.json', read_json(Path(__file__).resolve().parent / 'stations.json'))
     nmic_obs.add_stations(table, root)
-    stations = [s for s in table['stations'] if 'nmic' in s.get('sources', [])]
+    stations = request_stations(table['stations'])
     if not stations:
         parser.error('No active NMIC stations; configure STATIONS_NMIC_DIR / METADATA first')
     # One batch per run: 176 sites fit comfortably in a normal HTTP request.

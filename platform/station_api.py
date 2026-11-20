@@ -10,13 +10,13 @@ from urllib.parse import parse_qs
 from datetime import date, datetime, timedelta
 from station_common import (ROOT, XJ_BOUNDS, XINJIANG, MODELS, VARIABLES, DAY_WINDOWS, THRESHOLDS, GRID_DATASETS,
                             GRID_MODELS, GRID_THRESHOLDS, MOMENTS, UTC, cache_root, iso,
-                            read_json, stamp, moment_score, event_score, bjt)
+                            read_json, stamp, moment_score, event_score, bjt, CMAGD_BOX, CMAGD_MODELS, CMAGD_NOTICE, in_cmagd)
 
 RANGES = {'0-240': (0,240), '0-24': (0,24), '25-72': (25,72), '73-168': (73,168), '169-240': (169,240)}
 LEAD_GROUPS = {'near': (0,24), 'short': (25,72), 'medium': (73,168), 'extended': (169,240)}
 
 # Same numeric/AI ordering as app.js numericFirst (including WN3 correction).
-OVERVIEW_REGIONS = ('all', 'hn', 'hun', 'gba', 'hk', 'sz', 'xj')
+OVERVIEW_REGIONS = ('all', 'cmagd', 'hn', 'hun', 'gba', 'hk', 'sz', 'xj')
 OVERVIEW_MODELS = ('ecmwf','ec01','ecens','gfs','gefs','wn3ml','aifs','aigfs','wn3')
 # Same wording as the detailed pages' legend.
 OVERVIEW_LABELS = {'wn3': 'WN3 集合平均'}
@@ -37,7 +37,7 @@ def overview(params):
     return overview_cached(str(directory), element, int(day), int(days), region)
 
 
-@lru_cache(maxsize=126)
+@lru_cache(maxsize=192)
 def overview_cached(path, element, day, days, region='all'):
     directory = Path(path)
     metadata = cached_json(str(directory/'meta.json'))
@@ -48,7 +48,8 @@ def overview_cached(path, element, day, days, region='all'):
     # The producer's regional scores already exclude XINJIANG. Query persisted
     # pairs only for actual coverage and observations: grade A+C cannot recover
     # observation frequencies when a higher grade was forecast (table 3-1).
-    south = [str(s['id']) for s in metadata.get('stations',[]) if str(s['id']) not in XINJIANG]
+    south = [str(s['id']) for s in metadata.get('stations',[]) if str(s['id']) not in XINJIANG and not s.get('cmagd_extended')]
+    models = CMAGD_MODELS if region == 'cmagd' else OVERVIEW_MODELS
     if region != 'all':
         # 用户 2026-11-11 要求总览可选区域；区域名单与详细分析页相同，并且取自同一代快照。
         south = [str(i) for i in region_stations(region, metadata.get('stations',[]))]
@@ -59,8 +60,8 @@ def overview_cached(path, element, day, days, region='all'):
              ' AND station IN ('+','.join('?' for _ in south)+')'+
              # Naming every model lets SQLite seek the primary key instead of
              # reading each station's whole history (57 s -> 2 s on Spark).
-             ' AND model IN ('+','.join('?' for _ in OVERVIEW_MODELS)+')')
-    args = [variable, iso(start), iso(end), *([hi] if element=='rain' else [lo,hi]), *south, *OVERVIEW_MODELS]
+             ' AND model IN ('+','.join('?' for _ in models)+')')
+    args = [variable, iso(start), iso(end), *([hi] if element=='rain' else [lo,hi]), *south, *models]
     observed = [0]*6
     with sqlite3.connect((directory/'pairs.sqlite').as_uri()+'?mode=ro&immutable=1',uri=True) as db:
         db.execute('PRAGMA cache_size=-4000')
@@ -96,25 +97,32 @@ def overview_cached(path, element, day, days, region='all'):
         usable = bool(rows) and (all('N1' in r and 'N2' in r for r in rows) if element=='t' else
             all(any(r.get('grade')==k for r in rows if r['model']==m) for m in {r['model'] for r in rows} for k in range(1,7))
             and all(any(not r.get('grade') and r.get('threshold')==.1 and 'T' in r
-                        for r in rows if r['model']==m) for m in {r['model'] for r in rows}))
+                        for r in rows if r['model']==m) for m in {r['model'] for r in rows})
+            # 2026-11-18 用户要求总览加累加检验：各量级阈值的计数也要齐，否则走下面的现算。
+            and all(any(not r.get('grade') and r.get('threshold')==t for r in rows if r['model']==m)
+                    for m in {r['model'] for r in rows} for t in guifan.BOUNDS[24]))
         if not usable:
             # Old/incomplete score products: aggregate existing pairs, without
             # writing files or invoking any forecast pairing/score producer.
             rows = []
             expressions = ['COUNT(*)','SUM(ABS(fc-ob))']+guifan.sql_expressions()
             if element=='rain':
-                expressions += ['SUM(fc>=0.1 AND ob>=0.1)','SUM(fc<0.1 AND ob>=0.1)','SUM(fc>=0.1 AND ob<0.1)']
+                # 累加检验：预报、实况都达到该量级算报对（H），顺序 H、M、F，和 guifan.rain_rows 一致。
+                for t in guifan.BOUNDS[24]:
+                    expressions += [f'SUM(fc>={t} AND ob>={t})',f'SUM(fc<{t} AND ob>={t})',f'SUM(fc>={t} AND ob<{t})']
             for model, n, absolute, *counts in db.execute('SELECT model,'+','.join(expressions)+
                     ' FROM pairs WHERE '+where+' GROUP BY model', args):
                 base = dict(model=model,n=n,var=variable,lead=hi)
                 if element=='t':
                     rows.append(dict(base,MAE=absolute/n,**guifan.extras('t',counts)))
                 else:
-                    h,m,f = counts[-3:]
-                    rows.append(dict(base,threshold=.1,H=h,M=m,F=f,T=counts[2]))
+                    width = len(guifan.COLUMNS)
+                    for i,t in enumerate(guifan.BOUNDS[24]):
+                        h,m,f = (int(c or 0) for c in counts[width+3*i:width+3*i+3])
+                        rows.append(dict(base,threshold=t,H=h,M=m,F=f,**(dict(T=counts[2]) if t==.1 else {})))
                     rows.extend(guifan.grade_rows(base,counts[:len(guifan.COLUMNS)]))
     result = []
-    for model in OVERVIEW_MODELS:
+    for model in models:
         selected = [r for r in rows if r['model']==model and r.get('n',0)>0]
         if not selected: continue
         if element=='t':
@@ -131,9 +139,15 @@ def overview_cached(path, element, day, days, region='all'):
                 group = [r for r in selected if r.get('grade')==k]
                 a,b,c = (sum(r[key] for r in group) for key in ('H','F','M'))
                 grades.append(dict(grade=k,A=a,B=b,C=c,TS=a/(a+b+c) if a+b+c else None))
-            values = dict(n=n,H=h,M=m,F=f,T=t,PC=(n-m-f+t)/n,grades=grades)
+            cumulative = []
+            for k,bound in enumerate(guifan.BOUNDS[24],1):
+                group = [r for r in selected if not r.get('grade') and r.get('threshold')==bound]
+                a,b,c = (sum(r[key] for r in group) for key in ('H','F','M'))
+                cumulative.append(dict(grade=k,threshold=bound,A=a,B=b,C=c,TS=a/(a+b+c) if a+b+c else None))
+            values = dict(n=n,H=h,M=m,F=f,T=t,PC=(n-m-f+t)/n,grades=grades,cumulative=cumulative)
         result.append(dict(model=model,label=OVERVIEW_LABELS.get(model,MODELS[model]),**values))
-    grades = [dict(g,observed=observed[g['id']-1]) for g in guifan.metadata(hours=24)['grades']
+    grades = [dict(g,observed=observed[g['id']-1],threshold=guifan.BOUNDS[24][g['id']-1],
+                   observed_cumulative=sum(observed[g['id']-1:])) for g in guifan.metadata(hours=24)['grades']
               if g['id']<=4 or observed[g['id']-1] or
               forecast_extremes[g['id']-5]] if element=='rain' else []
     return dict(state='ready' if result else 'empty',generation=directory.name,element=element,day=day,days=days,region=region,
@@ -167,7 +181,8 @@ def meta():
     # Snapshots published before the 1/3-day windows existed only carry 7/30.
     windows = [d for d in DAY_WINDOWS if (directory/f'scores-{d}.json').is_file()]
     metadata = cached_json(str(directory/'meta.json'))
-    return dict(metadata, **window_metadata(metadata), state='ready', windows=windows, **basemap)
+    return dict(metadata, **window_metadata(metadata), state='ready', windows=windows, **basemap,
+                cmagd_models=CMAGD_MODELS, cmagd_notice=CMAGD_NOTICE)
 
 
 def parameters(query, allowed):
@@ -378,11 +393,14 @@ def grid_rows_file(params):
 HUANAN_IDS = frozenset('''57957 59023 59046 59058 59072 59082 59087 59096 59117 59211 59254 59265
 59278 59287 59293 59316 59417 59431 59456 59493 59501 59632 59644 59658 59663 59673 59758 59792
 59838 59845 59855 59948 ZGGG ZGKL ZGNN ZGOW ZGSZ ZJHK ZJSY VHHH VMMC'''.split())
-REGION_BOUNDS = {'xj': XJ_BOUNDS, 'gba': (111.9, 21.6, 115.3, 23.5), 'hk': (113.8, 22.14, 114.5, 22.56), 'sz': (113.7, 22.44, 114.65, 22.88)}
+REGION_BOUNDS = {'cmagd': CMAGD_BOX, 'xj': XJ_BOUNDS, 'gba': (111.9, 21.6, 115.3, 23.5), 'hk': (113.8, 22.14, 114.5, 22.56), 'sz': (113.7, 22.44, 114.65, 22.88)}
 
 
 def region_stations(region, stations=None):
     if stations is None: stations = meta().get('stations', [])
+    if region == 'cmagd':
+        return [s['id'] for s in stations if in_cmagd(s['lon'], s['lat'])]
+    stations = [s for s in stations if not s.get('cmagd_extended')]
     if region == 'hn':
         return [s['id'] for s in stations if str(s.get('province_code')) in ('44', '45', '46') or
                 str(s['id']) in HUANAN_IDS or str(s['id']).startswith(('450', 'SZ-'))]
@@ -414,13 +432,15 @@ def nmic_majority(region, stations):
 
 def effective_window_end(metadata, region):
     end = stamp(metadata['window_end'])
-    if metadata.get('nmic_end') and nmic_majority(region, metadata.get('stations', [])):
-        end = min(end, stamp(metadata['nmic_end']))
+    latest = (metadata.get('cmagd_nmic_end') or metadata.get('nmic_end')) if region == 'cmagd' else metadata.get('nmic_end')
+    if latest and nmic_majority(region, metadata.get('stations', [])):
+        end = min(end, stamp(latest))
     return end
 
 
 def window_metadata(metadata):
     return dict(nmic_end=metadata.get('nmic_end'),
+                cmagd_nmic_end=metadata.get('cmagd_nmic_end') or metadata.get('nmic_end'),
                 region_nmic_majority={region: nmic_majority(region, metadata.get('stations', []))
                                       for region in OVERVIEW_REGIONS})
 
@@ -490,7 +510,7 @@ def grid_rows(params):
         with sqlite3.connect(database.as_uri()+'?mode=ro&immutable=1',uri=True) as check:
             has_extra='N1' in {r[1] for r in check.execute('PRAGMA table_info(daily)')}
         if has_extra:cols+=list(guifan.COLUMNS)
-        m_keys = list(GRID_MODELS)
+        m_keys = list(CMAGD_MODELS if region == 'cmagd' else GRID_MODELS)
         ph_m = ','.join('?' for _ in m_keys)
         ph_s = ','.join('?' for _ in st_ids)
         where = f'WHERE model IN ({ph_m}) AND var=? AND day>=? AND day<=? AND station IN ({ph_s})'

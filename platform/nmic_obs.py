@@ -4,7 +4,7 @@ from pathlib import Path
 import os
 import re
 
-from station_common import ROOT, UTC, cache_root, finite, in_box, iso, read_json
+from station_common import ROOT, UTC, PAIR_DAYS, cache_root, finite, in_cmagd, iso, read_json
 from sz_district_obs import _dewpoint
 
 FIELDS = {'Station_Id_C', 'Year', 'Mon', 'Day', 'Hour', 'TEM', 'PRS_Sea', 'WIN_S_Avg_2mi', 'RHU', 'PRE_3h'}
@@ -20,7 +20,7 @@ def number(text):
     return value if value is not None and abs(value) < 990000 else None
 
 
-def read_records(folder):
+def read_records(folder, windows=None, end=None, compact=False):
     """Deduplicate whole reports; last filename/line wins, independent of mtimes.
 
     The export's readme contains no timezone/special-value definitions. UTC is
@@ -46,6 +46,10 @@ def read_records(folder):
                 at = datetime(*(int(item[k]) for k in ('Year', 'Mon', 'Day', 'Hour')), tzinfo=UTC)
                 if not re.fullmatch(r'\d{5}', sid) or at.hour % 3:
                     raise ValueError(f'Invalid NMIC station/time: {path.name}:{line_no}')
+                if windows is not None and (sid not in windows or at < windows[sid] or at > end):
+                    continue
+                if compact:
+                    item = {k: item[k] for k in ('TEM','RHU','PRS_Sea','WIN_S_Avg_2mi','PRE_3h')}
                 key = sid, at
                 if key in records:
                     diagnostics['duplicates'] += 1
@@ -56,11 +60,16 @@ def read_records(folder):
 
 
 def observation_rows(stations, end, cutoff, root=None, records=None):
+    cutoffs = {s['id']: max(cutoff, end-timedelta(days=PAIR_DAYS)) if s.get('cmagd_extended') else cutoff
+               for s in stations if not s.get('nmic_cmagd_metadata_only')}
     if records is None:
-        records, _ = read_records(data_dir(root))
-    ids = {s['id'] for s in stations}; rows = []
+        # Keep only scoreable reports plus exact backward rain tiles. Old sites
+        # retain their original cutoff; large outer raw archives cannot expand
+        # the in-memory observation window beyond the 16-day pair window.
+        records, _ = read_records(data_dir(root), {sid:at-timedelta(hours=24) for sid,at in cutoffs.items()}, end, compact=True)
+    rows = []
     for (sid, at), item in sorted(records.items()):
-        if sid not in ids or not cutoff <= at <= end:
+        if sid not in cutoffs or not cutoffs[sid] <= at <= end:
             continue
         t, rh = number(item['TEM']), number(item['RHU'])
         td = _dewpoint(t, rh) if t is not None and -100 <= t <= 70 else None
@@ -153,16 +162,20 @@ def add_stations(table, root=None, end=None):
     active = table.setdefault('stations', []); inactive = table.setdefault('inactive', [])
     existing = {s['id']: s for s in active+inactive}
     cutoff = (end or now()) - timedelta(days=45)
+    diagnostics['missing_metadata'] = []
+    diagnostics['outside_cmagd'] = []
     for sid in sorted(latest):
+        if sid not in metadata:
+            diagnostics['missing_metadata'].append(sid)
+            continue
+        meta = metadata[sid]
+        lon, lat = finite(meta.get('lon')), finite(meta.get('lat'))
+        if lon is None or lat is None or not in_cmagd(lon, lat):
+            diagnostics['outside_cmagd'].append(sid)
+            continue
         if sid in existing:
             station = existing[sid]
         else:
-            meta = metadata.get(sid)
-            if meta is None:
-                raise ValueError(f'NMIC station missing metadata: {sid}')
-            lon, lat = finite(meta['lon']), finite(meta['lat'])
-            if lon is None or lat is None or not in_box(lon, lat):
-                continue
             station = dict(id=sid, wmo=sid, type='synop', name=meta['name'], lon=lon, lat=lat,
                            elevation=number(meta['height']), sources=[], model_elevations={},
                            coordinate_source='NMIC A0012_stations_api.json')
@@ -174,6 +187,16 @@ def add_stations(table, root=None, end=None):
             station['province_code'] = provinces[sid]
         if latest[sid] >= cutoff and station in inactive:
             inactive.remove(station); active.append(station)
+    # The checked-in province map is the complete 260-site core (43/44/45/46).
+    # No inference from station-number prefixes or previous run order is used.
+    for station in active + inactive:
+        station['cmagd_extended'] = (set(station.get('sources', ())) == {'nmic'} and
+                                    str(station.get('province_code')) not in ('43', '44', '45', '46'))
+        # Outer mixed-source sites are already part of the legacy products.
+        # Importing their NMIC reports must not fill old gaps or invalidate
+        # the EC01 point-request roster/certificates.
+        station['nmic_cmagd_metadata_only'] = ('nmic' in station.get('sources', ()) and
+            not station['cmagd_extended'] and str(station.get('province_code')) not in ('43', '44', '45', '46'))
     table['nmic'] = dict(**diagnostics, stations=len(latest), latest=iso(max(latest.values())))
     correct_coordinates(table, metadata)   # coordfix1
     return table
